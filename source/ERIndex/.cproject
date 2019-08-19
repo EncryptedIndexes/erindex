@@ -133,7 +133,7 @@
                     					
                     <sourceEntries>
                         						
-                        <entry excluding="srcBzip2|srcFMIndex|srcSalsa20|src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="srcFMIndex|srcBzip2|srcSalsa20|src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         						
                         <entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
                         						
@@ -283,7 +283,7 @@
                     					
                     <sourceEntries>
                         						
-                        <entry excluding="srcBzip2|srcFMIndex|srcSalsa20|src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="srcFMIndex|srcBzip2|srcSalsa20|src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         						
                         <entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
                         						
