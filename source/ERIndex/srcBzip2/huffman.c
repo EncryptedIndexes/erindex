@@ -61,7 +61,7 @@
 
 #include <assert.h>
 
-#include "../srcBzip2/bzlib_private.h"
+#include "../srcBzip2Old/bzlib_private.h"
 
 /*---------------------------------------------------*/
 #define WEIGHTOF(zz0)  ((zz0) & 0xffffff00)
