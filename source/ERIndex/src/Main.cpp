@@ -1043,8 +1043,13 @@ void testBuild(string databaseRoot,string sequencesDirectory,string indexFileNam
  	 *
  	 * */
 	Database database(databaseRoot);
+
 	//login
 	database.login(3,databaseRoot+"/security/user_3.pvt");
+
+	//database.addReferenceSequence(21, "/home/fernando/camilla/references/hs37d5_chr21.fa");
+	database.addReferenceSequence(20, "/home/fernando/camilla/references/hs37d5_chr20.fa");
+
 
 	std::chrono::time_point<std::chrono::system_clock> startTime,endTime;
 	startTime=std::chrono::system_clock::now();

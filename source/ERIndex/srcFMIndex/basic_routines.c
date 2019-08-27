@@ -79,8 +79,6 @@ int int_pow2(int u)    // compute 2^u
    Unread/unwritten bits of Bit_buffer are the most significant ones.
    ***************************************************** */
 
-//uint32 Bit_buffer;
-//int  Bit_buffer_size;  /* number of unread/unwritten bits in Bit_buffer */
 
 // ***** Initializes the Bit_buffer to zero
 void init_bit_buffer(FM_INDEX *Infile)
@@ -90,7 +88,17 @@ void init_bit_buffer(FM_INDEX *Infile)
 }
 
 
+uint32 Bit_buffer;
+int  Bit_buffer_size;  /* number of unread/unwritten bits in Bit_buffer */
 
+// ***** Initializes the Bit_buffer to zero
+//  Used only to create indexes of reference sequences
+void orig_init_bit_buffer(void)
+{
+  Bit_buffer= (uint32) 0;
+  Bit_buffer_size=0;
+
+}
 
 
 
@@ -554,16 +562,325 @@ int my_getline(char *line, int max_len, FILE *f)
 
 
 
+// *** Load Bit_buffer 8 bits at time, until it contains at
+//     least n (<=24) bits. Then return n bits from Bit_buffer. ***
+
+int orig_fbit_read24(FILE *f, int n)
+{
+  int t0;
+  uint32 t,u;
+
+  assert(Bit_buffer_size<8);
+  assert(n>0 && n<=24);
+
+  /* --- read groups of 8 bits until size>= n --- */
+  while(Bit_buffer_size<n) {
+    if ((t0=getc(f)) == EOF){
+      fprintf(stderr,"Unexpected end of file -bit_read-\n");
+      exit(1);
+    }
+    t = (uint32) t0;
+    Bit_buffer |= (t << (24-Bit_buffer_size));
+    Bit_buffer_size += 8;
+  }
+  /* ---- write n top bits in u ---- */
+  u = Bit_buffer >> (32-n);
+  /* ---- update buffer ---- */
+  Bit_buffer <<= n;
+  Bit_buffer_size -= n;
+  return((int)u);
+}
+
+
+
+// ****** Read n bits from file f
+int orig_fbit_read(FILE *f,int n)
+{
+  int orig_fbit_read24(FILE *f,int n);
+  uint32 u = 0;
+
+  assert(n <= 32);
+  if (n > 24){
+    u =  orig_fbit_read24(f,n-24)<<24;
+    u |= orig_fbit_read24(f,24);
+    return((int)u);
+  } else {
+    return(orig_fbit_read24(f,n));
+  }
+}
+
+
+
+// *****  Complete with zeroes the first byte of Bit_buffer
+//        This way, the content of Bit_buffer is entirely flushed out *****
+
+void orig_fbit_flush(FILE *f)
+{
+  void orig_fbit_write24(FILE *f, int n, int vv);
+
+  if(Bit_buffer_size!=0)
+    orig_fbit_write24(f, 8 - (Bit_buffer_size%8) , 0);  // pad with zero !
+}
+
+
+// ********* Write n (<= 24) bits taken from v. The content of
+//           Bit_buffer is flushed out until it contains <8 bits *********
+
+void orig_fbit_write24(FILE *f, int n, int vv)
+{                              // v contains bits to read starting from
+                               // the least significant bits
+  uint32 v = (uint32) vv;
+
+  assert(Bit_buffer_size<8);
+  assert(n>0 && n<=24);
+  assert( v < 1u <<(n+1) );
+
+  /* ------- add n bits to Bit_buffer -------- */
+  Bit_buffer_size += n;       // add first, to compute the correct shift
+  Bit_buffer |= (v << (32 - Bit_buffer_size));  // compact to end of the buffer
+
+  /* ------- flush Bit_buffer as much as possible ----- */
+  while (Bit_buffer_size>=8) {
+    if( putc((Bit_buffer>>24),f) == EOF) {
+      fprintf(stderr,"Error writing to output file -fbit_write-\n");
+      exit(1);
+    }
+    Bit_buffer <<= 8;
+    Bit_buffer_size -= 8;
+  }
+}
+
+
+// ****** Write in file f the n bits taken from vv (possibly n > 24)
+void orig_fbit_write(FILE *f, int n, int vv)
+{
+  void orig_fbit_write24(FILE *f,int n, int vv);
+  uint32 v = (uint32) vv;
+
+  assert(n <= 32);
+  if (n > 24){
+    orig_fbit_write24(f,n-24, (v>>24) & 0xffL);
+    orig_fbit_write24(f,24, v & 0xffffffL);
+  } else {
+    orig_fbit_write24(f,n,v);
+  }
+}
+
+
+// ****** Write in Bit_buffer n bits taken from vv (possibly n > 24)
+void bit_write(int n, int vv)
+{
+  void bit_write24(int n, int vv);
+  uint32 v = (uint32) vv;
+
+  assert(n <= 32);
+  if (n > 24){
+    bit_write24(n-24, (v>>24) & 0xffL);
+    bit_write24(24, v & 0xffffffL);
+  } else {
+    bit_write24(n,v);
+  }
+
+}
+
+
+// ***** Write n (<= 24) bits taken from vv. The content of
+// ***** Bit_buffer is flushed out until it contains <8 bits
+
+void bit_write24(int n, int vv)
+{                              // v contains bits to read starting from
+                               // the least significant bits
+  uint32 v = (uint32) vv;
+
+  assert(Bit_buffer_size<8);
+  assert(n>0 && n<=24);
+  assert( v < 1u << n );
+
+  /* ------- add n bits to Bit_buffer -------- */
+  Bit_buffer_size += n;       // add first, to compute the correct shift
+  Bit_buffer |= (v << (32 - Bit_buffer_size));  // compact to end of the buffer
+
+  /* ------- flush Bit_buffer as much as possible ----- */
+  while (Bit_buffer_size>=8) {
+    if( putc((Bit_buffer>>24),Outfile) == EOF) {
+      fprintf(stderr,"Error writing to output file -bit_write-\n");
+      exit(1);
+    }
+    Outfile_size++;
+    Bit_buffer <<= 8;
+    Bit_buffer_size -= 8;
+  }
+}
+
+
+// ***** write n using the 7x8 scheme. The most
+// ***** significant bit indicates if the representation extends
+// ***** to the successive bytes.
+
+void write7x8(int nn)
+{
+  void bit_write(int n, int vv);
+  uint32 t;
+  uint32 n = (uint32) nn;
+
+  do {
+    t = n & 0x7f;       // takes last seven bits
+    n = n >> 7;
+    if(n>0) t |= 0x80;  // set 8th bit
+    bit_write(8,t);
+  } while(n>0);
+}
+
+
+// *****  Complete with zeroes the first byte of Bit_buffer
+// *****  This way, the content of Bit_buffer is entirely flushed out
+
+void bit_flush( void )
+{
+  if(Bit_buffer_size!=0)
+    bit_write(8 - (Bit_buffer_size%8) , 0);  // pad with zero !
+}
 
 
 
 
+// ****** Write in Bit_buffer four bytes
+void uint_write(int uu)
+{
+  void bit_write(int n, int vv);
+  uint32 u = (uint32) uu;
+
+  bit_write(8, (u>>24) & 0xffL);
+  bit_write(8, (u>>16) & 0xffL);
+  bit_write(8, (u>> 8) & 0xffL);
+  bit_write(8,  u      & 0xffL);
+
+}
 
 
 
 
+// ***** Moves over the proper stream.
+// ***** This stream can be: I/O, MMap, Internal Memory
+// ***** and it is indicated in the global variable Type_mem_ops
 
+int orig_my_fseek(FILE *f, long offset, int whence)
+{
+  int res = 0;    // code for no error
 
+  switch (Type_mem_ops)
+    {
+    case EXT_MEM:
+      res = fseek(f,offset,whence);
+      break;
+
+    case EXT_MMAP:
+      if ((whence == SEEK_SET) && (offset < File_end - File_start + 1))
+	{ File_pos = File_start + offset;}
+      else if ((whence == SEEK_END) &&  (offset < File_end - File_start + 1))
+	{ File_pos = File_end - offset; }
+      else res = 1;  // error
+      break;
+
+    case IN_MEM:
+      if ((whence == SEEK_SET) && (offset < File_end - File_start + 1))
+	{ File_pos = File_start + offset; }
+      else if ((whence == SEEK_END) &&  (offset < File_end - File_start + 1))
+	{ File_pos = File_end - offset; }
+      else res = 1;  // error
+      break;
+
+    default:
+      fprintf(stderr,"Error in choosing memory management -my_fseek-");
+      exit(1);
+    }
+  return res;
+}
+
+// ***** fopen, fread, or mmap a file.
+// ***** The effect depends on the chosen memory management
+// ***** according to what is stored in Type_mem_ops
+
+FILE *orig_my_fopen(const char *path, const char *mode)
+{
+  FILE *res;
+  int len;
+
+  if ((res = fopen(path,mode)) == NULL){
+    fprintf(stderr,"Error opening file %s ", path);
+    perror("(my_fopen)");
+    exit(1);
+  }
+  fseek(res,0L,SEEK_END);  // compute file length
+  len = ftell(res);
+
+  fseek(res,0L,SEEK_SET);  //rewind
+
+  switch (Type_mem_ops)
+    {
+    case EXT_MEM:
+      break;
+
+    case EXT_MMAP:
+      // fd = open(path,O_RDONLY);
+      File_start = (uchar *) mmap(0,len,PROT_READ,MAP_SHARED,fileno(res),0);
+      File_pos = File_start;
+      File_end = File_start + len - 1;
+      break;
+
+    case IN_MEM:
+      if ((File_start = (uchar *) malloc(len)) == NULL){
+	fprintf(stderr,"Error in allocating memory -my_fopen-");
+	exit(1);
+      }
+      if (len != (int) fread(File_start,sizeof(uchar),len,res)) {
+	// (int) read(fileno(res),File_start,len)) {
+	fprintf(stderr,"Error in reading form file -my_fopen-");
+	exit(1);
+      }
+      File_pos = File_start;
+      File_end = File_start + len - 1;
+      break;
+
+    default:
+      fprintf(stderr,"Error in choosing memory management -my_fopen-");
+      break;
+    }
+
+  return res;
+
+}
+
+// ***** fclose or munmap a file.
+// ***** The effect depends on the chosen memory management
+// ***** according to what is stored in Type_mem_ops
+
+void orig_my_fclose(FILE *f)
+{
+
+  switch (Type_mem_ops)
+    {
+    case EXT_MEM:
+      break;
+
+    case EXT_MMAP:
+      munmap(File_start, (int)(File_end - File_start + 1));
+      break;
+
+    case IN_MEM:
+      free(File_start);
+      break;
+
+    default:
+      fprintf(stderr,"Error in choosing memory management -- my_fclose() --");
+      break;
+    }
+
+  if (fclose(f) == EOF){
+    fprintf(stderr,"Error in closing the file -- my_fclose --");
+    exit(1);
+  }
+}
 
 
 

@@ -10,6 +10,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/foreach.hpp>
 
+
 namespace std {
 
 Test::Test(string xmlFilePath) {
@@ -20,7 +21,7 @@ Test::~Test() {
 	// TODO Auto-generated destructor stub
 }
 
-void Test::loadParameters(string xmlFilePath){
+void Test::loadParameters(string xmlFilePath)  {
 	boost::property_tree::ptree pTree;
 	boost::property_tree::read_xml(xmlFilePath,pTree);
 	//read the test parameters from the XML file

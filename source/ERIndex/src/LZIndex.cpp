@@ -15,6 +15,7 @@
 #include "EncryptedFileBitWriter.h"
 #include "EncryptedFileBitReader.h"
 #include "BitSetRLEEncoder.h"
+#include "Utils.h"
 #include <chrono>
 #include <thread>
 
@@ -390,7 +391,7 @@ void LZIndex::openCorrespondenceFiles(){  //ensures that the reference index is 
 
 
 
-
+/*
 // ****** Read n bits from file f
 int fbit_read_simple(FILE *f,int* Bit_buffer_size, uint32* Bit_buffer,int n)
 {
@@ -416,7 +417,7 @@ int fbit_read24_simple(FILE *f, int* Bit_buffer_size, uint32* Bit_buffer, int n)
   assert(*Bit_buffer_size<8);
   assert(n>0 && n<=24);
 
-  /* --- read groups of 8 bits until size>= n --- */
+  // --- read groups of 8 bits until size>= n ---
   while(*Bit_buffer_size<n) {
     if ((t0=getc(f)) == EOF){
       fprintf(stderr,"Unexpected end of file -bit_read-\n");
@@ -426,14 +427,14 @@ int fbit_read24_simple(FILE *f, int* Bit_buffer_size, uint32* Bit_buffer, int n)
     *Bit_buffer |= (t << (24-*Bit_buffer_size));
     *Bit_buffer_size += 8;
   }
-  /* ---- write n top bits in u ---- */
+  //* ---- write n top bits in u ----
   u = *Bit_buffer >> (32-n);
-  /* ---- update buffer ---- */
+  // ---- update buffer ----
   *Bit_buffer <<= n;
   *Bit_buffer_size -= n;
   return((int)u);
 }
-
+*/
 
 inline int get_suffix(FILE *Safile, int pointerSize,int i)
 {
@@ -451,8 +452,8 @@ inline int get_suffix(FILE *Safile, int pointerSize,int i)
   *Bit_buffer_size=0;
 
   if(rem)
-    fbit_read_simple(Safile,Bit_buffer_size,Bit_buffer,rem);
-  return fbit_read_simple(Safile, Bit_buffer_size,Bit_buffer,pointerSize);
+    Utils::fbit_read_simple(Safile,Bit_buffer_size,Bit_buffer,rem);
+  return Utils::fbit_read_simple(Safile, Bit_buffer_size,Bit_buffer,pointerSize);
 }
 
 

@@ -15,13 +15,16 @@ public:
 	ReferenceSequence();
 	virtual ~ReferenceSequence();
 	friend class Database;
+	friend class Catalog;
 	friend class LZIndex;
 private:
 	int id;
 	string forwardIndexFileName;
 	string reverseIndexFileName;
 	string correspondenceFilesName;
-	string forwardSuffixArrayFileName;  // usato, solo per il momento, per rimediare alla scarsa efficienza di FM-INDEX v1 nel marcare le righe
+	string forwardSuffixArrayFileName;  // usato, solo per il momento,
+	                                    // per rimediare alla scarsa efficienza di FM-INDEX v1
+										// nel marcare le righe
 };
 
 } /* namespace std */

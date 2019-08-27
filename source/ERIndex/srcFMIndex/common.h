@@ -146,36 +146,38 @@ typedef struct FM_INDEX{
 /* ================ "general" global variables ============ */
 extern int Verbose;             /* produce verbose output */
 
-//extern int Type_compression;    /* indicates type of compression adopted *//
-//extern int Is_dictionary;       /* a dictionary has to be processed */
-//extern int Is_URL;              /* a dictionary of URLS has to be processed */
-//extern int Is_huffword;         /* compression output of 7-bit huffword */
-//extern int Bucket_size_lev1;    /* size of superbucket (multiple of 1K) */
-//extern int Bucket_size_lev2;    /* size of bucket (multiple of 1K & divides _lev1) */
-//extern int Mtf_save;            /* # of copied MTF element */
-//extern int Num_bucs_lev1;       /* overall number of superbuckets */
-//extern int Num_bucs_lev2;       /* overall number of buckets */
-//extern int Start_prologue_info_sb; // starting byte of info superbuckets
-//extern int Start_prologue_info_b;  // starting byte of info buckets
-//extern int Start_prologue_occ;     // starting byte of char occurrences
-//// int Retrieved_occ;          // Number of retrieved explicit pos
-//extern double Marked_char_freq;    // maximum frequency of the marked char
 
+//Provo a decommentarli per compilare compr_main.c
+extern int Type_compression;    /* indicates type of compression adopted */
+extern int Is_dictionary;       /* a dictionary has to be processed */
+extern int Is_URL;              /* a dictionary of URLS has to be processed */
+extern int Is_huffword;         /* compression output of 7-bit huffword */
+extern int Bucket_size_lev1;    /* size of superbucket (multiple of 1K) */
+extern int Bucket_size_lev2;    /* size of bucket (multiple of 1K & divides _lev1) */
+extern int Mtf_save;            /* # of copied MTF element */
+extern int Num_bucs_lev1;       /* overall number of superbuckets */
+extern int Num_bucs_lev2;       /* overall number of buckets */
+extern int Start_prologue_info_sb; // starting byte of info superbuckets
+extern int Start_prologue_info_b;  // starting byte of info buckets
+extern int Start_prologue_occ;     // starting byte of char occurrences
+//// int Retrieved_occ;          // Number of retrieved explicit pos
+extern double Marked_char_freq;    // maximum frequency of the marked char
+extern char *Safile_name;      // name of possible sa file
 
 /* ======= global variables for I/O ====== */
-//extern FILE *Infile;            /* input file */
-//extern FILE *Outfile;           /* output file */
-//extern int Infile_size;         /* size of input file */
-//extern int  Outfile_size;       /* size of the output file */
+extern FILE *Infile;            /* input file */
+extern FILE *Outfile;           /* output file */
+extern int Infile_size;         /* size of input file */
+extern int  Outfile_size;       /* size of the output file */
 
-//extern FILE *Infile_head;            /* header file of a dictionary */
-//extern FILE *Infile_dict;            /* dictionary file */
+extern FILE *Infile_head;            /* header file of a dictionary */
+extern FILE *Infile_dict;            /* dictionary file */
 
 
 /* ======= global variables for file management ====== */
-//extern uchar *File_start;  // byte where mapped file starts in memory
-//extern uchar *File_end;    // byte where mapped file starts in memory
-//extern uchar *File_pos;    // byte where read/write are currently positioned
+extern uchar *File_start;  // byte where mapped file starts in memory
+extern uchar *File_end;    // byte where mapped file starts in memory
+extern uchar *File_pos;    // byte where read/write are currently positioned
 extern int Type_mem_ops;   // It may assume one of the three values below
 
 // ---- word search strategy
@@ -282,6 +284,7 @@ int bit_read24(FM_INDEX *Infile,int);//modifica 22/09/2017
 int bit_read(FM_INDEX *Infile,int);
 uchar my_getc(FM_INDEX *);
 int my_fseek(FM_INDEX *, long, int);
+int orig_my_fseek(FILE *f, long offset, int whence);
 void init_bit_buffer(FM_INDEX *);
 
 void read_basic_prologue(FM_INDEX *Infile,bwi_out *);
@@ -304,6 +307,7 @@ void disable_bwi_cache(FM_INDEX *);
 //void my_open_file(char *);
 FM_INDEX* my_open_file(char *);
 void my_fclose(FM_INDEX *);
+void orig_my_fclose(FILE *);
 
 #endif
 /* COMMON_H_ */

@@ -283,6 +283,258 @@ void uncompress_bucket_multihuf(FM_INDEX *Infile,uchar *dest, int len, int alpha
 
 
 
+/* ********************************************************************
+   rle+compression of a string using Huffman with multiple tables
+   input
+     int   len         size of mtf sequence
+     uchar *in         input mtf sequence
+     int   alpha_size   size of the alphabet
+   output
+     the compressed string is written in the output file
+   ******************************************************************* */
+void multihuf_compr(uchar *in, int len, int alpha_size)
+{
+  void hbMakeCodeLengths(uchar *len,int *freq,int alphaSize,int maxLen);
+  void hbAssignCodes(int *code,uchar *len,int minL,int maxL,int asize);
+  void bit_write(int,int);
+  void out_of_mem(char *);
+  int v, t, i, j, gs, ge, totc, bt, bc, iter;
+  int nSelectors, minLen, maxLen, new_len;
+  int nGroups;
+  uint16 cost[BZ_N_GROUPS];
+  int  fave[BZ_N_GROUPS];
+  uint16* mtfv;
+  uchar *selector;
+
+   mtfv = (uint16 *) malloc((len+1)*sizeof(uint16));
+   if(mtfv==NULL) out_of_mem("multiuhf_compr");
+
+   // encode sequences of 0's using 1-2 coding
+   new_len=0;
+   {
+     int c,z=0;
+     for(i=0;i<len;i++) {
+       c=in[i];
+       assert(c<alpha_size);
+       if(c==0) z++;
+       else {
+	 /* ----- check if there are pending zeores ---- */
+	 if(z>0) {             // 1-2 encoding
+	   z++;                // write z+1 in binary least sign bit first
+	   while(z>1) {
+	     mtfv[new_len++] = (z&1) ? BZ_RUNB : BZ_RUNA;
+	     z = z>>1;
+	   }
+	   z=0;
+	 }
+	 mtfv[new_len++]=(uint16) c+1;
+       }
+     }
+     // ---- there could be some pending zeroes
+     if(z>0) {
+       z++;                // write z+1 in binary least sign bit first
+       while(z>1) {
+	 mtfv[new_len++] = (z&1) ? BZ_RUNB : BZ_RUNA;
+	 z = z>>1;
+       }
+     }
+   }
+   mtfv[new_len++] = alpha_size+1;  // end of block
+   alpha_size +=2;                 // 2 new symbols have been used
+   if(Verbose > 3)
+     fprintf(stderr,"block size after MTF & 1-2 coding: %d\n",new_len);
+
+   // init mtf_freq[]
+   for(i=0;i<alpha_size;i++) mtf_freq[i]=0;
+   for(i=0;i<new_len;i++) mtf_freq[mtfv[i]]++;
+   // init huf_len[][]
+   for (t = 0; t < BZ_N_GROUPS; t++)
+      for (v = 0; v < alpha_size; v++)
+         huf_len[t][v] = BZ_GREATER_ICOST;
+   // alloc selector[]
+   selector = (uchar *) malloc((1+new_len/BZ_G_SIZE)*sizeof(uchar));
+   if(selector==NULL) out_of_mem("multihuf_compr");
+
+   /*--- Decide how many coding tables to use ---*/
+   assert(new_len > 0);
+   if (new_len < 200)  nGroups = 2; else
+   if (new_len < 600)  nGroups = 3; else
+   if (new_len < 1200) nGroups = 4; else
+   if (new_len < 2400) nGroups = 5; else
+                       nGroups = 6;
+
+   /*--- Generate an initial set of coding tables ---*/
+   // each table uses BZ_LESSER_ICOST for a group of consecutive
+   // chars (gs to ge) and BZ_GREATER_ICOST for the others chars
+   {
+     int nPart, remF, tFreq, aFreq;
+
+     nPart = nGroups;
+     remF  = new_len;
+     gs = 0;
+     while (nPart > 0) {
+         tFreq = remF / nPart;
+         ge = gs-1;
+         aFreq = 0;
+         while (aFreq < tFreq && ge < alpha_size-1) {
+            ge++;
+            aFreq += mtf_freq[ge];
+         }
+         if (ge > gs
+             && nPart != nGroups && nPart != 1
+             && ((nGroups-nPart) % 2 == 1)) {
+            aFreq -= mtf_freq[ge];
+            ge--;
+         }
+         if (Verbose > 3)
+            fprintf(stderr,"      initial group %d, [%d .. %d], "
+                      "has %d syms (%4.1f%%)\n",
+                      nPart, gs, ge, aFreq,
+                      (100.0 * (float)aFreq) / (float)(new_len) );
+         for (v = 0; v < alpha_size; v++)
+            if (v >= gs && v <= ge)
+               huf_len[nPart-1][v] = BZ_LESSER_ICOST; else
+               huf_len[nPart-1][v] = BZ_GREATER_ICOST;
+         nPart--;
+         gs = ge+1;
+         remF -= aFreq;
+      }
+   }
+
+   /*---
+      Iterate up to BZ_N_ITERS times to improve the tables.
+   ---*/
+   for (iter = 0; iter < BZ_N_ITERS; iter++) {
+      for (t = 0; t < nGroups; t++) fave[t] = 0;
+      for (t = 0; t < nGroups; t++)
+         for (v = 0; v < alpha_size; v++)
+            rfreq[t][v] = 0;
+      nSelectors = 0;
+      totc = 0;
+      gs = 0;
+      while (True) {
+	 /* Set group start & end marks. --*/
+         if (gs >= new_len) break;
+         ge = gs + BZ_G_SIZE - 1;      // size is at most BZ_G_SIZE
+         if (ge >= new_len) ge = new_len-1;
+         /*--
+            Calculate the cost of this group as coded
+            by each of the coding tables.
+         --*/
+         for (t = 0; t < nGroups; t++) cost[t] = 0;
+         if (nGroups == 6) {
+            register uint16 cost0, cost1, cost2, cost3, cost4, cost5;
+            cost0 = cost1 = cost2 = cost3 = cost4 = cost5 = 0;
+            for (i = gs; i <= ge; i++) {
+               uint16 icv = mtfv[i];
+               cost0 += huf_len[0][icv];
+               cost1 += huf_len[1][icv];
+               cost2 += huf_len[2][icv];
+               cost3 += huf_len[3][icv];
+               cost4 += huf_len[4][icv];
+               cost5 += huf_len[5][icv];
+            }
+            cost[0] = cost0; cost[1] = cost1; cost[2] = cost2;
+            cost[3] = cost3; cost[4] = cost4; cost[5] = cost5;
+         } else {
+            for (i = gs; i <= ge; i++) {
+               uint16 icv = mtfv[i];
+               for (t = 0; t < nGroups; t++) cost[t] += huf_len[t][icv];
+            }
+         }
+         /*--
+            Find the coding table which is best for this group,
+            and record its identity in the selector table.
+         --*/
+         bc = 999999999; bt = -1;
+         for (t = 0; t < nGroups; t++)
+            if (cost[t] < bc) { bc = cost[t]; bt = t; };
+         totc += bc;
+         fave[bt]++;
+         selector[nSelectors++] = bt;
+         /*--
+            Increment the symbol frequencies for the selected table.
+          --*/
+         for (i = gs; i <= ge; i++)
+            rfreq[bt][ mtfv[i] ]++;
+         gs = ge+1;    // consider next group
+      }
+      if (Verbose >3) {
+         fprintf(stderr,"      pass %d: size is %d, grp uses are ",
+		 iter+1,totc/8 );
+         for (t = 0; t < nGroups; t++)
+            fprintf(stderr, "%d ", fave[t] );
+         fprintf (stderr, "\n" );
+      }
+      /*--
+        Recompute the tables based on the accumulated frequencies.
+      --*/
+      for (t = 0; t < nGroups; t++)
+         hbMakeCodeLengths (&(huf_len[t][0]),&(rfreq[t][0]),alpha_size,20);
+   }
+
+   /*--- Assign actual codes for the tables. --*/
+   for (t = 0; t < nGroups; t++) {
+      minLen = 32;
+      maxLen = 0;
+      for (i = 0; i < alpha_size; i++) {
+         if (huf_len[t][i] > maxLen) maxLen = huf_len[t][i];
+         if (huf_len[t][i] < minLen) minLen = huf_len[t][i];
+      }
+      assert(!(maxLen > 20));
+      assert(!(minLen < 1));
+      hbAssignCodes(&(huf_code[t][0]),&(huf_len[t][0]),
+		    minLen,maxLen,alpha_size);
+   }
+
+   // write coding tables (i.e codeword length).
+   assert(nGroups<8);
+   bit_write(3,nGroups);
+   for (t = 0; t < nGroups; t++) {
+      int curr = huf_len[t][0];
+      bit_write(5, curr);
+      for (i = 0; i < alpha_size; i++) {
+         while (curr < huf_len[t][i]) { bit_write(2,2); curr++; /* 10 */ };
+         while (curr > huf_len[t][i]) { bit_write(2,3); curr--; /* 11 */ };
+         bit_write(1, 0 );
+      }
+   }
+
+   /*--- write selectors and compressed data ---*/
+   {
+     int sel=0;
+     uchar pos[BZ_N_GROUPS], ll_i, tmp2, tmp;
+     for (i = 0; i < nGroups; i++) pos[i] = i;
+     gs = 0;
+     while (True) {
+       if (gs >= new_len) break;
+       ge = gs + BZ_G_SIZE - 1;
+       if (ge >= new_len) ge = new_len-1;  // establish group boundaries
+       assert( selector[sel] < nGroups);
+       {
+	 ll_i=selector[sel];              // get mtf rank for selector
+	 j = 0;
+	 tmp = pos[j];
+         while ( ll_i != tmp ) {
+            j++;
+	    tmp2 = tmp; tmp = pos[j]; pos[j] = tmp2;
+         };
+         pos[0] = tmp;
+         bit_write(j+1,1);                // write selector mtf rank in unary
+       }
+       for (i = gs; i <= ge; i++) {
+	 assert(mtfv[i]<alpha_size);
+         bit_write(huf_len[selector[sel]][mtfv[i]],
+		   huf_code[selector[sel]][mtfv[i]]);
+       }
+       gs = ge+1;
+       sel++;
+     }
+     assert( sel == nSelectors);
+   }
+   free(selector);
+   free(mtfv);
+}
 
 
 
