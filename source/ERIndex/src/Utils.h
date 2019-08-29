@@ -26,7 +26,7 @@ public:
 	static int fbit_read24_simple(FILE *f, int* Bit_buffer_size, uint32* Bit_buffer, int n);
 	static char *toCString(string s);
 	static string loadFasta(string fastaFileName);
-	static void generateIndividualKeyFile(string &keyFilePath);
+	static void generateSalsa20KeyFile(string &keyFilePath);
 	static int generateRSAKeyPair(string &privateKeyFileName,string &publicKeyFileName);
 };
 

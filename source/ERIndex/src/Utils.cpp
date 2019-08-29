@@ -144,7 +144,7 @@ int Utils::generateRSAKeyPair(string &privateKeyFileName,string &publicKeyFileNa
 
 }
 
-void Utils::generateIndividualKeyFile(string &keyFilePath) {
+void Utils::generateSalsa20KeyFile(string &keyFilePath) {
 		std::random_device generator;
 
 		u8* key=new u8[64];

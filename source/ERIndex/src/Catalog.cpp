@@ -24,7 +24,7 @@ Catalog::Catalog(string rootDirectory) {
 	if (boost::filesystem::is_regular_file(catalogFilePath))
 		load();
 	else
-		create();
+		initialize();
 
 
 	//test
@@ -51,12 +51,14 @@ Catalog::~Catalog() {
 /**
  * Creates an empty catalog
  */
-void Catalog::create(){
+void Catalog::initialize(){
 	boost::property_tree::ptree catalogElement;
 	boost::property_tree::ptree referencesElement;
 	boost::property_tree::ptree individualsElement;
+	boost::property_tree::ptree usersElement;
 	catalogElement.push_back(std::make_pair("references", referencesElement));
 	catalogElement.push_back(std::make_pair("individuals", individualsElement));
+	catalogElement.push_back(std::make_pair("users", usersElement));
 	catalogTree.push_back(std::make_pair("catalog",catalogElement));
 
 	save();
@@ -89,6 +91,15 @@ void Catalog::load(){
 				seq->forwardSuffixArrayFileName=referencesPath+referenceSubTree.get<string>("forwardSuffixArrayFileName");
 				references[seq->id]=seq;
 		}
+		for( auto const& referenceChildNode: catalogTree.get_child("catalog.users") ) {
+						boost::property_tree::ptree referenceSubTree = referenceChildNode.second;
+						User *u=new User();
+						u->id=referenceSubTree.get<int>("id");
+						u->username=referenceSubTree.get<string>("username");
+						u->loginValue=referenceSubTree.get<string>("loginValue");
+						users[u->id]=u;
+		}
+
 }
 
 
@@ -128,6 +139,20 @@ void Catalog::addIndividual(Individual *individual){
 	individualsElement.add_child("individual", individualSubTree);
 
 }
+
+
+void Catalog::addUser(User *user){
+	users[user->id]=user;
+
+	boost::property_tree::ptree &usersElement=catalogTree.get_child("catalog.users");
+	boost::property_tree::ptree userSubTree;
+	userSubTree.put("id",user->id);
+	userSubTree.put("username",user->username);
+	userSubTree.put("loginValue",user->loginValue);
+	usersElement.add_child("user", userSubTree);
+
+}
+
 
 
 }

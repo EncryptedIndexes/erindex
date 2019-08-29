@@ -1028,9 +1028,6 @@ void testEncryptedBitWriter(){
 
 
 
-
-
-
 void testBuild(string databaseRoot,string sequencesDirectory,string indexFileName,int referenceId){
 	/*
 	Database database("/work/phd/progettoRicerca/dati/1000genomes/egcdb");
@@ -1046,10 +1043,6 @@ void testBuild(string databaseRoot,string sequencesDirectory,string indexFileNam
 
 	//login
 	database.login(3,databaseRoot+"/security/user_3.pvt");
-
-	//database.addReferenceSequence(21, "/home/fernando/camilla/references/hs37d5_chr21.fa");
-	database.addReferenceSequence(20, "/home/fernando/camilla/references/hs37d5_chr20.fa");
-
 
 	std::chrono::time_point<std::chrono::system_clock> startTime,endTime;
 	startTime=std::chrono::system_clock::now();
@@ -1312,7 +1305,6 @@ int test_accumulator()
 int main(int argc, char* argv[]) {
 	//testSdsl();
 
-
 	cout << "argc = " << argc << endl;
 	for(int i = 0; i < argc; i++)
 	      cout << "argv[" << i << "] = " << argv[i] << endl;
@@ -1334,7 +1326,83 @@ int main(int argc, char* argv[]) {
 	//createSdslSuffixArray();
 
 	string command=argv[1];
-	if (command=="build"){
+	if (command=="init"){
+		if (argc < 3){
+			cout << "The following parameters are required by the init command:" << endl;
+			cout << "1) Database root directory full path" << endl;
+			exit(1);
+		}
+		string databaseRoot=argv[2];
+		string systemKeyFile;
+		if (argc==4)
+			systemKeyFile=argv[3];
+		Database::initialize(databaseRoot, systemKeyFile);
+	} else if (command=="addref"){ //add a reference sequence
+		if (argc < 5){
+			cout << "The following parameters are required by the addref command:" << endl;
+			cout << "\t1) Database root directory full path" << endl;
+			cout << "\t2) Reference sequence numeric identifier (it could be the chromosome number, for example)"<< endl;
+			cout << "\t3) Reference sequence FASTA file full path" << endl;
+			exit(1);
+		}
+		string databaseRoot=argv[2];
+		int id=stoi(argv[3]);
+		string refSeqPath=argv[4];
+		Database database(databaseRoot);
+		database.addReferenceSequence(id, refSeqPath);
+
+	} else if (command=="addind"){ //add an individual
+		if (argc < 4){
+			cout << "The following parameters are required by the addind command:" << endl;
+			cout << "\t1) Database root directory full path" << endl;
+			cout << "\t2) Individual code" << endl;
+			cout << "Optional parameters:" << endl;
+			cout << "\t3) Individual Salsa20 key file path (if not given,a new key will be generated)" << endl;
+			exit(1);
+		}
+		string databaseRoot=argv[2];
+		string code=argv[3];
+		string individualKeyFilePath;
+		Database database(databaseRoot);
+		if (argc==5){
+			individualKeyFilePath=argv[4];
+			database.addIndividual(code, &individualKeyFilePath);
+		} else
+			database.addIndividual(code, NULL);
+
+
+
+
+
+	} else if (command=="adduser"){
+		if (argc < 4){
+			cout << "The following parameters are required by the adduser command:" << endl;
+			cout << "\t1) Database root directory full path" << endl;
+			cout << "\t2) Username" << endl;
+			cout << "Optional parameters:" << endl;
+
+			cout << "\t3) userId (user internal identifier)" << endl;
+			cout << "\t4) user's private key, in PEM format (mandatory if userId was given)" << endl;
+			cout << "\t5) user's public key, in PEM format (mandatory if userId was given)" << endl;
+			exit(1);
+		}
+		string databaseRoot=argv[2];
+		string username=argv[3];
+		string privateKeyFilePath;
+		string publicKeyFilePath;
+		int userId;
+		Database database(databaseRoot);
+		if (argc==7){
+			userId=stoi(argv[4]);
+			privateKeyFilePath=argv[5];
+			publicKeyFilePath=argv[6];
+			database.addUser(username,&userId, &privateKeyFilePath,&publicKeyFilePath);
+		} else
+			database.addUser(username,NULL,NULL,NULL);
+
+
+	}
+	else if (command=="build"){
 		if (argc < 6){
 			cout << "The following parameters are needed for the build command:" << endl;
 			cout << "1) database root directory" << endl;

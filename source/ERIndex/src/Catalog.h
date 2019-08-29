@@ -15,6 +15,7 @@
 #include <boost/filesystem.hpp>
 #include "Individual.h"
 #include "ReferenceSequence.h"
+#include "User.h"
 
 
 namespace std {
@@ -25,13 +26,16 @@ public:
 	virtual ~Catalog();
 	void addIndividual(Individual *individual);
 	void addReferenceSequence(ReferenceSequence *referenceSequence);
+	void addUser(User *user);
 	void save();
+
 
 	map<int64_t,Individual*> individuals;
 	unordered_map<int64_t,ReferenceSequence*> references;
+	map<int64_t,User*> users;
 private:
 	void load();
-	void create();
+	void initialize();
 	string rootDirectory;
 	string catalogFilePath;
 	boost::property_tree::ptree catalogTree;

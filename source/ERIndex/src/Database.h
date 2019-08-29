@@ -15,6 +15,7 @@
 #include "ReferenceSequence.h"
 #include "Portfolio.h"
 #include "Catalog.h"
+#include "User.h"
 
 namespace std {
 
@@ -24,11 +25,9 @@ class Database {
 public:
 	Database(string rootDirectory);
 	virtual ~Database();
+	static void initialize(string rootDirectory,string systemKeyFile);
 	void login(int64_t userId,string privateKeyFileName);
 	Portfolio *getPortfolio();
-
-
-
 
 	void buildIndex(string indexFileName,string sequencesDirectory,int referenceId,int blockSize);
 	LZIndex *openIndex(string indexFileName);
@@ -38,6 +37,8 @@ public:
 	ReferenceSequence *getReferenceSequence(int id);
 	Individual *addIndividual(string &code,string *individualKeyFilePath);
 	Individual *getIndividual(int id);
+	User *addUser(string username,int *userId,string *privateKeyFilePath,string *publicKeyFilePath);
+	User *getUser(int userId);
 	friend class LZIndex;
 private:
 	//void loadCatalog();
@@ -49,11 +50,7 @@ private:
 	string rootDirectory;
 	Catalog* catalog;
 	uint64_t* loggedUserId;
-	//The following two fields were moved to the Catalog class
-		//map<int64_t,Individual*> individuals;
-		//unordered_map<int64_t,ReferenceSequence> references;
-
-
+	User *loggedUser;
 
 
 };

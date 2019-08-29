@@ -32,7 +32,7 @@ namespace std {
 Database::Database(string rootDirectory) {
 	this->rootDirectory=rootDirectory;
 	this->loggedUserId=NULL;
-
+	this->loggedUser=NULL;
 
 	//Check if the database root directory exists
 	if (!boost::filesystem::is_directory(rootDirectory))
@@ -48,31 +48,87 @@ Database::Database(string rootDirectory) {
 		if (!boost::filesystem::create_directory(subdir))
 			throw runtime_error("Error while creating directory "+subdir);
 	subdir=rootDirectory + "/security";
-		if (!boost::filesystem::is_directory(subdir))
-			if (!boost::filesystem::create_directory(subdir))
-				throw runtime_error("Error while creating directory "+subdir);
+	if (!boost::filesystem::is_directory(subdir))
+		if (!boost::filesystem::create_directory(subdir))
+			throw runtime_error("Error while creating directory "+subdir);
+
+	string systemKeyPath=rootDirectory+"/security/system.key";
+	//Checks if the system key exists and creates it if necessary
+	if (!boost::filesystem::is_regular_file(systemKeyPath))
+		Utils::generateSalsa20KeyFile(systemKeyPath);
+
 	subdir=rootDirectory + "/indexes";
-		if (!boost::filesystem::is_directory(subdir))
-			if (!boost::filesystem::create_directory(subdir))
-				throw runtime_error("Error while creating directory "+subdir);
+	if (!boost::filesystem::is_directory(subdir))
+		if (!boost::filesystem::create_directory(subdir))
+			throw runtime_error("Error while creating directory "+subdir);
 
 	this->catalog= new Catalog(rootDirectory);
 
-	string s="MANU";
-	Individual *ind=addIndividual(s, NULL);
+	//Test
+	//string s="MANU";
+	//Individual *ind=addIndividual(s, NULL);
 }
+
+
+void Database::initialize(string rootDirectory,string systemKeyFile){
+	//Check if database root directory exists and is empty
+	//Ensures that the database root directory exists
+	if (!boost::filesystem::is_directory(rootDirectory)){
+		cout << "The root directory " + rootDirectory + " does not exist";
+		boost::filesystem::create_directories(rootDirectory);
+		cout << "-->root directory has been successfully created";
+	}
+	//Ensures that root directory is empty
+	if(!boost::filesystem::is_empty(rootDirectory))
+		throw runtime_error("Can't initialize a new database: the root directory " + rootDirectory + " is not empty");
+
+	//Creates the references subdirectory
+	string subdir=rootDirectory + "/references";
+	if (!boost::filesystem::create_directory(subdir))
+		throw runtime_error("Error while creating directory "+subdir);
+
+	//Creates the security subdirectory
+	subdir=rootDirectory + "/security";
+	if (!boost::filesystem::create_directory(subdir))
+		throw runtime_error("Error while creating directory "+subdir);
+	//Creates the Salsa20 system key
+	string systemKeyDatabasePath=rootDirectory+"/security/system.key";
+	if (boost::filesystem::is_regular_file(systemKeyFile))
+		boost::filesystem::copy_file(systemKeyFile,systemKeyDatabasePath,boost::filesystem::copy_option::overwrite_if_exists);
+	else
+		Utils::generateSalsa20KeyFile(systemKeyDatabasePath);
+
+	//Creates the indexes subdirectory
+	subdir=rootDirectory + "/indexes";
+	if (!boost::filesystem::create_directory(subdir))
+		throw runtime_error("Error while creating directory "+subdir);
+
+	//Creates an empty XML database catalog
+	Catalog catalog(rootDirectory);
+
+}
+
 
 
 Database::~Database() {
 	// TODO Auto-generated destructor stub
 }
 
+
+//TODO: replace userId with username
 void Database::login(int64_t userId,string privateKeyFileName){
-	//TODO: login logic
 
 	//set the current user
 	loggedUserId=new uint64_t;
 	*loggedUserId=userId;
+
+	loggedUser=getUser(userId);
+	if (loggedUser==NULL)
+		throw new runtime_error("The user "+ to_string(userId)+" does not exist!");
+
+	//TODO: implement login: decrypt the user object login value field and verify that the value
+	// decrypted value is exactly ERINDEX_LOGIN_VALUE
+
 }
 
 /*
@@ -477,7 +533,7 @@ Individual *Database::addIndividual(string &code, string *individualKeyFilePath)
 	//creates, if needed, the Salsa 20 key for the individual
 	string *ifp = new string(rootDirectory + "/security/" + code + ".key");
 	if (individualKeyFilePath ==NULL){
-		Utils::generateIndividualKeyFile(*ifp);
+		Utils::generateSalsa20KeyFile(*ifp);
 	}
 	else{
 		if (!boost::filesystem::is_regular_file(*individualKeyFilePath))
@@ -491,6 +547,64 @@ Individual *Database::addIndividual(string &code, string *individualKeyFilePath)
 	catalog->save();
 
 }
+
+
+
+
+
+
+User *Database::addUser(string username,int *userId,string *privateKeyFilePath,string *publicKeyFilePath){
+	User *u=new User();
+	u->username=username;
+	//if the parameter userid was given, check if it exists in the database
+	if (userId!=NULL){
+		if (catalog->users.count(*userId)>0)
+			throw new runtime_error("The user with id " +  to_string(*userId) + "already exists in the database!");
+		u->id=*userId;
+	}
+	else{
+		int greatestId=0;
+		for (std::map<int64_t,User*>::iterator it=catalog->users.begin(); it!=catalog->users.end(); ++it){
+
+			if (it->second->username == username)
+				throw new runtime_error("The user " +  username + "already exists in the database!");
+
+			if (it->second->id>greatestId)
+				greatestId=it->second->id;
+		}
+		u->id=greatestId+1;
+	}
+
+
+
+
+	string dbPrivateKeyFilePath=this->rootDirectory + "/security/user_"+   to_string(u->id) + ".pvt";
+	string dbPublicKeyFilePath=this->rootDirectory + "/security/user_"+ to_string(u->id) + ".pub";
+	if (privateKeyFilePath == NULL || publicKeyFilePath == NULL)
+		Utils::generateRSAKeyPair(dbPrivateKeyFilePath, dbPublicKeyFilePath);
+	else{
+		boost::filesystem::copy_file(*privateKeyFilePath,dbPrivateKeyFilePath,boost::filesystem::copy_option::overwrite_if_exists);
+		boost::filesystem::copy_file(*publicKeyFilePath,dbPublicKeyFilePath,boost::filesystem::copy_option::overwrite_if_exists);
+	}
+
+	//TODO:encrypts the value ERINDEX_LOGIN_VALUE with the user's public key
+	//and stores it into the loginValue field
+
+	catalog->addUser(u);
+	catalog->save();
+
+
+}
+
+
+User *Database::getUser(int userId){
+	if (catalog->users.count(userId)>0)
+		return catalog->users[userId];
+	else
+		return NULL;
+}
+
+
 
 
 
