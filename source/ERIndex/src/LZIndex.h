@@ -14,6 +14,9 @@
 #include <unordered_map>
 #include <map>
 #include <bitset>
+#include <seqan/sequence.h>
+#include <seqan/seq_io.h>
+#include <seqan/modifier.h>
 #include "LZFactor.h"
 #include "BPlusTree.h"
 #include "Database.h"
@@ -198,6 +201,12 @@ typedef struct IndividualResult{
 };
 
 
+enum SequencesSourceType
+{
+        DIRECTORY, // Sequences are contained in several single Fasta files
+        MULTIFASTA // Sequences are contained in a single MultiFASTA file
+};
+
 
 
 class LZIndex {
@@ -212,8 +221,9 @@ public:
 
 	void loadAllInMemory();
 	void loadReferenceInMemory();
-	void buildIndex(int numberOfIndividuals,Individual **individuals,string *fastaFileNames);
-	Factorization *addToIndex(Individual *individual,string fastaFileName,int lookAheadWindowSize,boost::dynamic_bitset<> &threadCharMap,int &threadLMax);
+	void buildIndexFromMultiFASTA(int numberOfIndividuals,Individual **individuals,seqan::StringSet<seqan::IupacString> *seqs);
+	void buildIndexFromDirectory(int numberOfIndividuals,Individual **individuals,string *fastaFileNames);
+	Factorization *addToIndex(Individual *individual,string &sequence,int lookAheadWindowSize,boost::dynamic_bitset<> &threadCharMap,int &threadLMax);
 
 	vector<int64_t> getIndividualIds();
 	void doLZFactorization(Factorization *f,const char *buffer,int len,boost::dynamic_bitset<> &threadCharMap, int &threadLMax);
@@ -292,7 +302,7 @@ private:
 	bool tryBackwardMatch(LZFactor *factor,int factorOffset, string pattern, int actualPosition,unsigned int &steps);
 	inline int reverseBackwardStep(int sai, char *character);
 
-	void factorizationThread(int threadNumber);
+	void factorizationThread(int threadNumber, SequencesSourceType sequencesSourceType);
 
 	Database &database;
 	int referenceIdentifier;
@@ -357,6 +367,7 @@ private:
     int numberOfIndividuals;
     Individual **individuals;
     string *fastaFileNames;
+    seqan::StringSet<seqan::IupacString> *multiFASTASequences;
     int nextToFactorize;
 
 

@@ -140,6 +140,16 @@ void Catalog::addIndividual(Individual *individual){
 
 }
 
+Individual* Catalog::getIndividual(string code){
+	for( auto it = individuals.begin(), end = individuals.end(); it != end; ++it){
+		    Individual *individual=it->second;
+		    if (individual->code==code)
+		    	return individual;
+	}
+	return NULL;
+}
+
+
 
 void Catalog::addUser(User *user){
 	users[user->id]=user;

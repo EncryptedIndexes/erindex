@@ -1024,6 +1024,39 @@ void testEncryptedBitWriter(){
 }
 
 
+void build(string databaseRoot,string multiFastaFilePath,string indexFileName,int referenceId){
+	/*
+	Database database("/work/phd/progettoRicerca/dati/1000genomes/egcdb");
+	//Build
+	database.buildIndex("20_1MB.egc","/work/phd/progettoRicerca/dati/1000genomes/sequences1MB",20,128);
+	//Open an existing index
+	bool result=database.verifyIndex("20_1MB.egc","/work/phd/progettoRicerca/dati/1000genomes/sequences1MB",20);
+	cout <<  (result?"Index OK":"ERROR: the index doesn't correspond to the original sequences");
+ 	//LZIndex *index=database.openIndex("20_1MB.egc");
+ 	 *
+ 	 * */
+	Database database(databaseRoot);
+
+	//login
+	database.login(3,databaseRoot+"/security/user_3.pvt");
+
+	std::chrono::time_point<std::chrono::system_clock> startTime,endTime;
+	startTime=std::chrono::system_clock::now();
+
+	//Build
+		//database.buildIndex("20_5MB.egc",databaseRoot+"/work/phd/progettoRicerca/dati/1000genomes/sequences5MB",20,128);
+	database.buildIndexFromMultiFASTA(indexFileName, multiFastaFilePath, referenceId, 128);
+	endTime=std::chrono::system_clock::now();
+	double buildTime=std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count()/double(1000);
+	cout <<  "Build time: " << buildTime << " ms" << endl;
+	//Open an existing index
+	bool result=database.verifyIndexFromMultiFASTA(indexFileName,multiFastaFilePath,referenceId);
+	cout <<  (result?"Index OK":"ERROR: the index doesn't correspond to the original sequences");
+	//LZIndex *index=database.openIndex("20_1MB.egc");
+
+}
+
+
 
 
 
@@ -1049,12 +1082,12 @@ void testBuild(string databaseRoot,string sequencesDirectory,string indexFileNam
 
 	//Build
 		//database.buildIndex("20_5MB.egc",databaseRoot+"/work/phd/progettoRicerca/dati/1000genomes/sequences5MB",20,128);
-	database.buildIndex(indexFileName,sequencesDirectory,referenceId,128);
+	database.buildIndexFromDirectory(indexFileName,sequencesDirectory,referenceId,128);
 	endTime=std::chrono::system_clock::now();
 	double buildTime=std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count()/double(1000);
 	cout <<  "Build time: " << buildTime << " ms" << endl;
 	//Open an existing index
-	bool result=database.verifyIndex(indexFileName,sequencesDirectory,referenceId);
+	bool result=database.verifyIndexFromDirectory(indexFileName, sequencesDirectory, referenceId);
 	cout <<  (result?"Index OK":"ERROR: the index doesn't correspond to the original sequences");
 	//LZIndex *index=database.openIndex("20_1MB.egc");
 
@@ -1370,10 +1403,6 @@ int main(int argc, char* argv[]) {
 		} else
 			database.addIndividual(code, NULL);
 
-
-
-
-
 	} else if (command=="adduser"){
 		if (argc < 4){
 			cout << "The following parameters are required by the adduser command:" << endl;
@@ -1399,23 +1428,24 @@ int main(int argc, char* argv[]) {
 			database.addUser(username,&userId, &privateKeyFilePath,&publicKeyFilePath);
 		} else
 			database.addUser(username,NULL,NULL,NULL);
-
-
 	}
 	else if (command=="build"){
 		if (argc < 6){
 			cout << "The following parameters are needed for the build command:" << endl;
 			cout << "1) database root directory" << endl;
-			cout << "2) sequences directory" << endl;
+			//cout << "2) sequences directory" << endl;
+			cout << "2) MultiFASTA file containing the sequences to be indexed" << endl;
 			cout << "3) file name of the index to build" << endl;
 			cout << "4) reference identifier" << endl;
 			exit(1);
 		}
 		string databaseRoot=argv[2];
-		string sequencesDirectory=argv[3];
+		//string sequencesDirectory=argv[3];
+		string multiFastaFileName=argv[3];
 		string indexFileName=argv[4];
 		int referenceId=stoi(argv[5]);
-		testBuild(databaseRoot,sequencesDirectory,indexFileName,referenceId);
+		//testBuild(databaseRoot,sequencesDirectory,indexFileName,referenceId);
+		build(databaseRoot,multiFastaFileName,indexFileName,referenceId);
 	} else if (command=="locate"){
 		if (argc < 3){
 			cout << "The following parameters are needed for the locate command:" << endl;

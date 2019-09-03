@@ -39,6 +39,10 @@ typedef pair<char, vector<int>> ExtraCharOccsPair;
 typedef pair<char, unordered_map<int,int>> CharMapPair;
 typedef pair<int,int> IntIntPair;
 
+
+
+
+
 //used to sort by position the occurences of a pattern in an individual sequence
 bool comparePtrToOccurrence(Occurrence* a, Occurrence* b) {
 	return (a->factorIndex < b->factorIndex  ||
@@ -861,7 +865,37 @@ void LZIndex::closeReverseReferenceIndex(){
 
 
 
-void LZIndex::buildIndex(int numberOfIndividuals,Individual **individuals,string *fastaFileNames){
+void LZIndex::buildIndexFromMultiFASTA(int numberOfIndividuals,Individual **individuals,seqan::StringSet<seqan::IupacString> *seqs){
+	this->numberOfIndividuals=numberOfIndividuals;
+	this->individuals=individuals;
+	this->fastaFileNames=fastaFileNames;
+	this->multiFASTASequences=seqs;
+	nextToFactorize=0;
+
+	int nt = std::thread::hardware_concurrency();
+	//int nt=1;
+
+	cout << "Number of threads: " << nt << endl;
+	std::vector<std::thread*> threads;
+	for (int t = 0; t < nt; t++)
+		threads.push_back(new std::thread(&LZIndex::factorizationThread,this,t,SequencesSourceType::MULTIFASTA));
+
+	for (int i = 0; i < nt; i++)
+		threads[i]->join();
+	for (int i = 0; i < nt; i++)
+		delete threads[i];
+
+
+	//Free the memory used for the reverse to forward and the forward to reverse map, used only during the factorization
+	delete[] r2f;
+	delete[] f2r;
+
+}
+
+
+
+
+void LZIndex::buildIndexFromDirectory(int numberOfIndividuals,Individual **individuals,string *fastaFileNames){
 	this->numberOfIndividuals=numberOfIndividuals;
 	this->individuals=individuals;
 	this->fastaFileNames=fastaFileNames;
@@ -874,7 +908,7 @@ void LZIndex::buildIndex(int numberOfIndividuals,Individual **individuals,string
 	cout << "Number of threads: " << nt << endl;
 	std::vector<std::thread*> threads;
 	for (int t = 0; t < nt; t++)
-		threads.push_back(new std::thread(&LZIndex::factorizationThread,this,t));
+		threads.push_back(new std::thread(&LZIndex::factorizationThread,this,t,SequencesSourceType::DIRECTORY));
 
 	for (int i = 0; i < nt; i++)
 		threads[i]->join();
@@ -891,7 +925,7 @@ void LZIndex::buildIndex(int numberOfIndividuals,Individual **individuals,string
 
 
 
-void LZIndex::factorizationThread(int threadNumber){
+void LZIndex::factorizationThread(int threadNumber, SequencesSourceType sourceType){
 	int toFactorize;
 	boost::dynamic_bitset<> threadCharMap;
 	int threadLMax=-1;
@@ -906,7 +940,17 @@ void LZIndex::factorizationThread(int threadNumber){
 		nextToFactorize++;
 		nextToFactorizeMutex.unlock();
 		if (!finished){
-			Factorization *f=addToIndex(individuals[toFactorize],fastaFileNames[toFactorize],1,threadCharMap,threadLMax);
+			string sequence;
+			if (sourceType == SequencesSourceType::MULTIFASTA ){
+				stringstream ss;
+				seqan::StringSet<seqan::IupacString> mfs=*multiFASTASequences;
+				ss << mfs[toFactorize];
+				sequence=ss.str();
+			}
+			else
+				sequence=loadFasta(fastaFileNames[toFactorize]);
+
+			Factorization *f=addToIndex(individuals[toFactorize],sequence,1,threadCharMap,threadLMax);
 			coutMutex.lock();
 			cout << "Thread " << threadNumber << ": factorized " << individuals[toFactorize]->code << endl;
 			cout << "\t" << f->factors.size() << " factors" << endl;
@@ -919,13 +963,10 @@ void LZIndex::factorizationThread(int threadNumber){
 		lmax=threadLMax;
 	charMap|=threadCharMap;  //adds to charMap the characters in this thread's charMap
 	charMapLmaxMutex.unlock();
-
-
 }
 
 
-Factorization *LZIndex::addToIndex(Individual *individual,string fastaFileName,int lookAheadWindowSize,boost::dynamic_bitset<> &threadCharMap,int &threadLMax){
-	string sequence=loadFasta(fastaFileName);
+Factorization *LZIndex::addToIndex(Individual *individual,string &sequence,int lookAheadWindowSize,boost::dynamic_bitset<> &threadCharMap,int &threadLMax){
 	Factorization *f=new Factorization(*this,individual);
 	doLZFactorization(f, sequence.c_str(),sequence.length(),threadCharMap,threadLMax);
 

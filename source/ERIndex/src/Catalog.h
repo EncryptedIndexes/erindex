@@ -25,6 +25,7 @@ public:
 	Catalog(string rootDirectory);
 	virtual ~Catalog();
 	void addIndividual(Individual *individual);
+	Individual* getIndividual(string code);
 	void addReferenceSequence(ReferenceSequence *referenceSequence);
 	void addUser(User *user);
 	void save();

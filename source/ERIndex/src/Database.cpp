@@ -92,6 +92,7 @@ void Database::initialize(string rootDirectory,string systemKeyFile){
 	if (!boost::filesystem::create_directory(subdir))
 		throw runtime_error("Error while creating directory "+subdir);
 	//Creates the Salsa20 system key
+	//TODO: store the system key in a more secure way
 	string systemKeyDatabasePath=rootDirectory+"/security/system.key";
 	if (boost::filesystem::is_regular_file(systemKeyFile))
 		boost::filesystem::copy_file(systemKeyFile,systemKeyDatabasePath,boost::filesystem::copy_option::overwrite_if_exists);
@@ -116,7 +117,7 @@ Database::~Database() {
 
 
 //TODO: replace userId with username
-void Database::login(int64_t userId,string privateKeyFileName){
+void Database::login(int64_t userId,string privateKeyFilePath){
 
 	//set the current user
 	loggedUserId=new uint64_t;
@@ -126,9 +127,13 @@ void Database::login(int64_t userId,string privateKeyFileName){
 	if (loggedUser==NULL)
 		throw new runtime_error("The user "+ to_string(userId)+" does not exist!");
 
+	loggedUserPrivateKeyFilePath=privateKeyFilePath;
+
+
 	//TODO: implement login: decrypt the user object login value field and verify that the value
 	// decrypted value is exactly ERINDEX_LOGIN_VALUE
 
+	portfolio=getPortfolio(*loggedUserId,loggedUserPrivateKeyFilePath);
 }
 
 /*
@@ -146,7 +151,7 @@ void Database::buildIndex(string indexFileName,string sequencesDirectory,int ref
 }
 */
 
-void Database::buildIndex(string indexFileName,string sequencesDirectory,int referenceId,int blockSize){
+void Database::buildIndexFromDirectory(string indexFileName,string sequencesDirectory,int referenceId,int blockSize){
 	LZIndex index(*this,referenceId,blockSize);
 	Individual **individs=new Individual*[catalog->individuals.size()];
 	string *fastaFileNames=new string[catalog->individuals.size()];
@@ -158,10 +163,42 @@ void Database::buildIndex(string indexFileName,string sequencesDirectory,int ref
 	    fastaFileNames[i]=sequenceFilePath;
 	    i++;
 	}
-	index.buildIndex(catalog->individuals.size(),individs,fastaFileNames);
+	index.buildIndexFromDirectory(catalog->individuals.size(),individs,fastaFileNames);
 	index.save(rootDirectory + "/indexes/"+ indexFileName);
 	index.close();
 }
+
+void Database::buildIndexFromMultiFASTA(string indexFileName, string multiFastaFilePath,
+		int referenceId, int blockSize) {
+	if (!boost::filesystem::is_regular_file(multiFastaFilePath))
+			throw new runtime_error("The given reference sequence file is not valid or not accessible!");
+
+		seqan::SeqFileIn seqFileIn(multiFastaFilePath.c_str());
+		seqan::StringSet<seqan::CharString> codes;
+		seqan::StringSet<seqan::IupacString> seqs;
+		seqan::readRecords(codes, seqs, seqFileIn);
+
+		int numSeqs=length(seqs);
+
+		if (numSeqs >0){
+			LZIndex index(*this,referenceId,blockSize);
+			Individual **individs=new Individual*[catalog->individuals.size()];
+
+			int i=0;
+			for (i=0;i<numSeqs;i++){
+				string sequenceCode(seqan::toCString(codes[0]));
+				//if the individual does not exist in the database catalog, adds it
+				Individual *individ=catalog->getIndividual(sequenceCode);
+				if (individ==NULL)
+					individ=addIndividual(sequenceCode,NULL);
+				individs[i]=individ;
+			}
+		} else
+			throw new runtime_error("The given MultiFASTA file is empty!");
+}
+
+
+
 
 LZIndex *Database::openIndex(string indexFileName){
 	LZIndex *index=new LZIndex(*this);
@@ -171,7 +208,57 @@ LZIndex *Database::openIndex(string indexFileName){
 }
 
 
-bool Database::verifyIndex(string indexFileName,string sequencesDirectory,int referenceId){
+
+bool Database::verifyIndexFromMultiFASTA(string indexFileName,string multiFastaFilePath,int referenceId){
+	if (!boost::filesystem::is_regular_file(multiFastaFilePath))
+					throw new runtime_error("The given index file is not valid or not accessible!");
+
+	if (!boost::filesystem::is_regular_file(multiFastaFilePath))
+				throw new runtime_error("The given reference sequence file is not valid or not accessible!");
+
+	LZIndex *index=new LZIndex(*this);
+	index->open(rootDirectory + "/indexes/"+ indexFileName);
+
+
+	seqan::SeqFileIn seqFileIn(multiFastaFilePath.c_str());
+	seqan::StringSet<seqan::CharString> codes;
+	seqan::StringSet<seqan::IupacString> seqs;
+	seqan::readRecords(codes, seqs, seqFileIn);
+
+	bool ok=true;
+	vector<int64_t> ids=index->getIndividualIds();
+	for (unsigned int i=0;i<ids.size();i++){
+
+		string s=index->getSequence(ids[i]);
+		Individual *individual=catalog->individuals[ids[i]];
+		cout << "Verifying the individual " << i << "(" << individual->code << ")" << endl;
+		int ssize=s.size();
+
+		seqan::IupacString t=seqs[i];
+		int tsize=length(t);
+
+		if (ssize!=tsize){
+			ok=false;
+			int minSize;
+			if (ssize<tsize)
+				minSize=ssize;
+			else
+				minSize=tsize;
+			for (int i=0;i<minSize;i++){
+				if (s[i]!=t[i]){
+					cout << "ERROR at " << i << endl;
+					break;
+				}
+			}
+		}
+	}
+	return ok;
+
+}
+
+
+
+bool Database::verifyIndexFromDirectory(string indexFileName,string sequencesDirectory,int referenceId){
 	LZIndex *index=new LZIndex(*this);
 	index->open(rootDirectory + "/indexes/"+ indexFileName);
 	bool ok=true;
@@ -249,31 +336,21 @@ void Database::loadCatalog(){
 */
 
 Portfolio *Database::getPortfolio (){
-	if (loggedUserId!=NULL)
-		return getPortfolio(*loggedUserId);
-	else
-		return NULL;
+	return portfolio;
 }
 
 
-Portfolio *Database::getPortfolio (int64_t userId){
-/*
-	char * decrypt = (char*)malloc(8);
-	int temp = RSA_private_decrypt(256, (unsigned char*)encrypt, (unsigned char*)decrypt,rsa_prikey , RSA_PKCS1_OAEP_PADDING);
-	if (!RAND_bytes(key, sizeof key)) {
-	    cout << "Aiutooo";
-	}
-*/
+Portfolio *Database::getPortfolio (int64_t userId,string privateKeyFilePath){
 	RSA *privateKey = NULL;
-	string filePath=rootDirectory+"/security/user_"+ boost::lexical_cast<std::string>(userId)+ ".pvt";
-	FILE *privateKeyFile = fopen(filePath.c_str(),"rb");
+	//string privateKeyFilePath=rootDirectory+"/security/user_"+ boost::lexical_cast<std::string>(userId)+ ".pvt";
+	FILE *privateKeyFile = fopen(privateKeyFilePath.c_str(),"rb");
+
 	//load user's private key
-	if (PEM_read_RSAPrivateKey(privateKeyFile, &privateKey, NULL, NULL) != NULL){
-	//if (fileExists(filePath,buffer)){
+	if (PEM_read_RSAPrivateKey(privateKeyFile, &privateKey, NULL, NULL) != NULL  ){
 		Portfolio *portfolio=new Portfolio(userId,privateKey);
-		fclose(privateKeyFile);
+
 		//load system key
-		filePath=rootDirectory+"/security/portfolio_"+ to_string(userId)+"_s.key";
+		string filePath=rootDirectory+"/security/portfolio_"+ to_string(userId)+"_s.key";
 		uint8_t *buffer=NULL;
 		if (fileExists(filePath,&buffer,true)){
 			Key *sk=new Key(portfolio,buffer);
@@ -294,7 +371,24 @@ Portfolio *Database::getPortfolio (int64_t userId){
 	  fclose(privateKeyFile);
 	  throw;
 	}
+
 }
+
+void Database::savePortfolio(Portfolio *portfolio){
+	RSA *publicKey = NULL;
+	string publicKeyFilePath=rootDirectory+"/security/user_"+ boost::lexical_cast<std::string>(portfolio->userId)+ ".pub";
+	FILE *publicKeyFile = fopen(publicKeyFilePath.c_str(),"rb");
+	//load user's public key
+	if (PEM_read_RSAPublicKey(publicKeyFile, &publicKey, NULL, NULL) != NULL){
+		portfolio->setPublicKey(publicKey);
+		portfolio->save(rootDirectory+"/security");
+	} else{
+		fclose(publicKeyFile);
+		throw;
+	}
+
+}
+
 
 
 inline bool Database::fileExists (const string& filePath,uint8_t **buffer,bool load) {
@@ -357,8 +451,6 @@ __inline__ int get_suffix(FILE *Safile, int n,int i)
   free(Bit_buffer_size);
   return val;
 }
-
-
 
 
 void Database::buildSuffixArrayCorrespondenceFiles(int n,string reverseSaFileName,string saFileName,string r2fFileName,string f2rFileName){
@@ -541,10 +633,23 @@ Individual *Database::addIndividual(string &code, string *individualKeyFilePath)
 		boost::filesystem::copy_file(*individualKeyFilePath,*ifp,boost::filesystem::copy_option::overwrite_if_exists);
 	}
 
-	//adds the individual to the catalog
+	//creates the new individual
 	Individual *ind=new Individual(newId,code);
+
+	//reads the value of the individual key and adds it to the user's portfolio
+	std::ifstream ifile;
+    ifile.open (*ifp);
+    uint8_t *clearValue=new uint8_t[64];
+	ifile >> clearValue;
+	ifile.close();
+	portfolio->addIndividualKey(ind, clearValue);
+	portfolio->saveIndividualKey(rootDirectory + "/security",newId);
+
+	//adds the individual to the catalog
 	catalog->addIndividual(ind);
 	catalog->save();
+
+	//TODO: remove the clear text individual key (I don't remove it at the moment for testing purposes)
 
 }
 
@@ -587,12 +692,26 @@ User *Database::addUser(string username,int *userId,string *privateKeyFilePath,s
 		boost::filesystem::copy_file(*publicKeyFilePath,dbPublicKeyFilePath,boost::filesystem::copy_option::overwrite_if_exists);
 	}
 
+
+	//reads the clear value of the system key from the corresponding file and adds it to the user's portfolio
+	std::ifstream ifile;
+	ifile.open (rootDirectory+"/security/system.key");
+	uint8_t *clearValue=new uint8_t[64];
+	ifile >> clearValue;
+	ifile.close();
+
+
+	//initializes the user's portfolio, storing in it the system key
+	Portfolio *portfolio=new Portfolio(u->id);
+	portfolio->addSystemKey(clearValue);
+	portfolio->saveSystemKey(rootDirectory + "/security");
+	savePortfolio(portfolio);
+
 	//TODO:encrypts the value ERINDEX_LOGIN_VALUE with the user's public key
 	//and stores it into the loginValue field
 
 	catalog->addUser(u);
 	catalog->save();
-
 
 }
 
