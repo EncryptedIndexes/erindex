@@ -33,7 +33,7 @@ int bwiMain(int argc, char *argv[])
   void bwi_open_files(char *, char *, int);
   double getTime ( void );  
   int check_bwi_suffix(char *s);
-  void compress_file(int save_sa_to_disk);
+  void compress_file(bwi_input *s,int save_sa_to_disk);
   //void decompress_file(void);
   extern char *optarg;
   extern int optind, opterr, optopt;
@@ -198,7 +198,8 @@ int bwiMain(int argc, char *argv[])
   //if(decompress)
   //  decompress_file();
   //else
-  compress_file(0);
+  bwi_input s;
+  compress_file(&s,0);
   end = getTime();
   fprintf(stderr,"  Total elapsed time --> %.2f seconds.\n", end-start);
 
@@ -267,13 +268,13 @@ void bwi_open_files(char *infile_name, char *outfile_name, int decompress)
  * 20/08/2019
  */
 int createFMIndex(char *infile_name, char *outfile_name,int bs_lev1, int bs_lev2, float mc_freq,
-		int save_sa_to_disk)
+		bwi_input *bwi,int save_sa_to_disk)
 {
   int getopt(int argc, char * const *argv, const char *options);
   void bwi_open_files(char *, char *, int);
   double getTime ( void );
   int check_bwi_suffix(char *s);
-  void compress_file(int save_sa_to_disk);
+  void compress_file(bwi_input *s,int save_sa_to_disk);
   //void compress_file(int save_sa_to_disk);
   extern char *optarg;
   extern int optind, opterr, optopt;
@@ -350,8 +351,7 @@ int createFMIndex(char *infile_name, char *outfile_name,int bs_lev1, int bs_lev2
   //if(decompress)
   //  decompress_file();
   //else
-
-  compress_file(save_sa_to_disk);
+  compress_file(bwi,save_sa_to_disk);
   end = getTime();
   fprintf(stderr,"  Total elapsed time --> %.2f seconds.\n", end-start);
 

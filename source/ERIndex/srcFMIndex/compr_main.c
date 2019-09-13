@@ -44,7 +44,7 @@ typedef struct {
    * main compression routine                                 *
    *                                                          *
    ********************************************************** */
-void compress_file(int save_sa_to_disk)
+void compress_file(bwi_input *s,int save_sa_to_disk)
 {
   void read_text(FILE *, bwi_input *s);
   void remap_alphabet(bwi_input *s);
@@ -62,67 +62,67 @@ void compress_file(int save_sa_to_disk)
   void bit_write(int,int);  
   void orig_init_bit_buffer(void);
   void write_susp_infos(bwi_input *s);
-  bwi_input s;
+  //bwi_input s;
   int i,len, retr_occ, retr_occ2, loc_occ_range;
   int Start_prologue_ranks;
 
   /* --------- Load the text file from disk ------- */  
   if(Verbose) fprintf(stderr,"Reading input file... ");  
-  read_text(Infile, &s);
+  read_text(Infile, s);
   if(Verbose) fprintf(stderr,"done! (%f seconds)\n",getTime());
   
   /* --------- Compact alphabet ------- */  
   if(Verbose>1) fprintf(stderr,"Remapping alphabet... ");  
-  remap_alphabet(&s);
+  remap_alphabet(s);
   if(Verbose>1) fprintf(stderr,"done! (%f seconds). ",getTime());
-  if(Verbose>1) fprintf(stderr,"Compact alphabet size = %d\n",s.alpha_size);
+  if(Verbose>1) fprintf(stderr,"Compact alphabet size = %d\n",s->alpha_size);
 
   /* --------- Build suffix array ------- */  
   if(Verbose) fprintf(stderr,"Building suffix array");  
-  build_sa(&s);
+  build_sa(s);
   if(Verbose) fprintf(stderr,"done! (%f seconds)\n",getTime());
 
   /* --------- Compute BWT ------- */  
   if(Verbose>1) fprintf(stderr,"Computing BWT... ");
-  compute_bwt(&s);
+  compute_bwt(s);
   if(Verbose>1) fprintf(stderr,"done! (%f seconds)\n",getTime());
 
   /* ------- mark chars and compute locations ----- */ 
   if (Is_dictionary)
-    retr_occ = compute_locations_dict(&s,&loc_occ_range);    // dictionary
+    retr_occ = compute_locations_dict(s,&loc_occ_range);    // dictionary
   else if (Is_huffword)
-    retr_occ = compute_locations_huffword(&s,&loc_occ_range);// huffword 
+    retr_occ = compute_locations_huffword(s,&loc_occ_range);// huffword
   else if (Is_URL)
-    retr_occ = compute_ranks_dict(&s,&loc_occ_range);        // URL
+    retr_occ = compute_ranks_dict(s,&loc_occ_range);        // URL
   else
-    retr_occ = compute_locations(&s);                        // standard
+    retr_occ = compute_locations(s);                        // standard
 
 
   /* --------- Compute various infos for each superbucket ------- */  
   if(Verbose>1) fprintf(stderr,"Computing infos superbukets... ");
-  compute_info_superbuckets(&s);
+  compute_info_superbuckets(s);
   if(Verbose>1) fprintf(stderr,"done! (%f seconds)\n", getTime());
 
   /* --------- Compute various infos for each bucket ------- */  
   if(Verbose>1) fprintf(stderr,"Computing infos buckets... ");
-  compute_info_buckets(&s);
+  compute_info_buckets(s);
   if(Verbose>1) fprintf(stderr,"done! (%f seconds)\n", getTime());
 
   /* --------- Writing the compressed file ------- */
-  Infile_size = s.text_size; 
+  Infile_size = s->text_size;
   Outfile_size=0;
 
-  write_prologue(&s);
+  write_prologue(s);
   if(Verbose) fprintf(stderr,"Prologue --> %d bytes!\n",Outfile_size);
 
   for(i=0;i<Num_bucs_lev1;i++)
-    compress_superbucket(&s,i);
+    compress_superbucket(s,i);
 
   /* ---- keep starting positions of occ-explicit list ---- */
   Start_prologue_occ = Outfile_size;
 
   /* -- write the starting position of buckets -- */
-  write_susp_infos(&s);
+  write_susp_infos(s);
 
   if (fseek(Outfile,Start_prologue_occ,SEEK_SET)) {
     fprintf(stderr, "Seek error on output file -compress_file-\n");
@@ -134,10 +134,10 @@ void compress_file(int save_sa_to_disk)
   if(Is_dictionary || Is_huffword || Is_URL)
     len = int_log2(loc_occ_range);     // bits required for each rank
   else  
-    len = int_log2(s.text_size);       // bits required for each pos 
+    len = int_log2(s->text_size);       // bits required for each pos
 
   for(i=0; i < retr_occ; i++)
-    bit_write(len,s.loc_occ[i]);
+    bit_write(len,s->loc_occ[i]);
 
   bit_flush();
 
@@ -161,7 +161,7 @@ void compress_file(int save_sa_to_disk)
       out_of_mem("Unequal number of sampled NULLs\n");
 
     for(i=0; i < retr_occ; i++)
-      bit_write(len,s.loc_occ[i]);
+      bit_write(len,s->loc_occ[i]);
     
     bit_flush();
   
@@ -171,7 +171,7 @@ void compress_file(int save_sa_to_disk)
 	    retr_occ2,(int)ftell(Outfile) - Start_prologue_ranks);
   }
 
-
+/*
   if (save_sa_to_disk){
 	  if(Verbose)
 		  fprintf(stderr,"Writing suffix array to disk... ");
@@ -182,16 +182,18 @@ void compress_file(int save_sa_to_disk)
   	  }
   	  orig_init_bit_buffer();
 
-  	  int b = int_log2(s.text_size);  //bits required for each suffix array element
-  	  for (int i=0;i<s.text_size;i++){
-  		  orig_fbit_write(SAOutfile,b,s.sa[i]);
+  	  //int b = 32;  //bits required for each suffix array element
+  	  //orig_f_bit_write(SAOutfile,b,s.text_size);
+  	  int b= int_log2(s->text_size);
+  	  for (int i=0;i<s->text_size;i++){
+  		  orig_fbit_write(SAOutfile,b,s->sa[i]);
   	  }
   	  orig_fbit_flush(SAOutfile);
 
   	  orig_my_fclose(SAOutfile);
 
     };
-
+*/
 
 }
 

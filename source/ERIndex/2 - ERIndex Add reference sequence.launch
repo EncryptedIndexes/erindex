@@ -18,11 +18,11 @@
     <stringAttribute key="org.eclipse.cdt.launch.DEBUGGER_START_MODE" value="run"/>
     <booleanAttribute key="org.eclipse.cdt.launch.DEBUGGER_STOP_AT_MAIN" value="false"/>
     <stringAttribute key="org.eclipse.cdt.launch.DEBUGGER_STOP_AT_MAIN_SYMBOL" value="main"/>
-    <stringAttribute key="org.eclipse.cdt.launch.PROGRAM_ARGUMENTS" value="addref /home/fernando/camilla/erdb 21 /home/fernando/camilla/references/hs37d5_chr21.fa"/>
-    <stringAttribute key="org.eclipse.cdt.launch.PROGRAM_NAME" value="Debug/ERIndex"/>
+    <stringAttribute key="org.eclipse.cdt.launch.PROGRAM_ARGUMENTS" value="addref /home/fernando/erdb 20 /home/fernando/references/hs37d5_chr20.fa"/>
+    <stringAttribute key="org.eclipse.cdt.launch.PROGRAM_NAME" value="Release/ERIndex"/>
     <stringAttribute key="org.eclipse.cdt.launch.PROJECT_ATTR" value="ERIndex"/>
     <booleanAttribute key="org.eclipse.cdt.launch.PROJECT_BUILD_CONFIG_AUTO_ATTR" value="true"/>
-    <stringAttribute key="org.eclipse.cdt.launch.PROJECT_BUILD_CONFIG_ID_ATTR" value="cdt.managedbuild.config.gnu.exe.debug.194549211"/>
+    <stringAttribute key="org.eclipse.cdt.launch.PROJECT_BUILD_CONFIG_ID_ATTR" value="cdt.managedbuild.config.gnu.exe.release.1927580084"/>
     <booleanAttribute key="org.eclipse.cdt.launch.use_terminal" value="true"/>
     <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
         <listEntry value="/ERIndex"/>

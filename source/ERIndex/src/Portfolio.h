@@ -28,6 +28,9 @@ public:
 	void setEncryptedValue(uint8_t *encryptedValue);
 	uint8_t *getEncryptedValue();
 	uint8_t *getClearValue();
+	void dumpClearValue();
+	void dumpEncryptedValue();
+	void computeClearValue();
 	Key(Portfolio *portfolio, uint8_t *encryptedValue);
 	Key(Portfolio *portfolio);
 	virtual ~Key();
@@ -59,6 +62,8 @@ public:
 	friend class Database;
 	friend class Key;
 	void setPublicKey(RSA *publicKey);
+	void setPrivateKey(RSA *privateKey);
+	void loadPublicKey(string &publicKeyFilePath);
 	Key *getSystemKey();
 	void addSystemKey(uint8_t *clearValue);
 	void save(string directory);

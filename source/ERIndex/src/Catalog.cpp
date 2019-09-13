@@ -85,10 +85,10 @@ void Catalog::load(){
 				ReferenceSequence *seq=new ReferenceSequence();
 				string referencesPath=rootDirectory+ "/references/";
 				seq->id=referenceSubTree.get<int>("id");
-				seq->forwardIndexFileName=referencesPath+referenceSubTree.get<string>("forwardIndexFileName");
-				seq->reverseIndexFileName=referencesPath+referenceSubTree.get<string>("reverseIndexFileName");
-				seq->correspondenceFilesName=referencesPath+referenceSubTree.get<string>("correspondenceFilesName");
-				seq->forwardSuffixArrayFileName=referencesPath+referenceSubTree.get<string>("forwardSuffixArrayFileName");
+				seq->forwardIndexFileName=referenceSubTree.get<string>("forwardIndexFileName");
+				seq->reverseIndexFileName=referenceSubTree.get<string>("reverseIndexFileName");
+				seq->correspondenceFilesName=referenceSubTree.get<string>("correspondenceFilesName");
+				seq->forwardSuffixArrayFileName=referenceSubTree.get<string>("forwardSuffixArrayFileName");
 				references[seq->id]=seq;
 		}
 		for( auto const& referenceChildNode: catalogTree.get_child("catalog.users") ) {

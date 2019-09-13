@@ -108,7 +108,21 @@ void Portfolio::setPublicKey(RSA* publicKey) {
 	this->publicKey=publicKey;
 }
 
+void Portfolio::setPrivateKey(RSA* privateKey) {
+	this->privateKey=privateKey;
+}
 
+
+void Portfolio::loadPublicKey(string &publicKeyFilePath) {
+	RSA *pk = NULL;
+	FILE *publicKeyFile = fopen(publicKeyFilePath.c_str(),"rb");
+	if (PEM_read_RSAPublicKey(publicKeyFile, &pk, NULL, NULL) != NULL)
+		this->publicKey=pk;
+	else{
+		fclose(publicKeyFile);
+		throw;
+	}
+}
 
 
 
@@ -153,8 +167,9 @@ uint8_t *Key::getEncryptedValue(){
 	if (encryptedValue==NULL){
 		if (clearValue==NULL || portfolio->publicKey ==NULL)
 			throw new runtime_error("Cannot compute the encrypted value: unknown clear value or user's public key");
-		char *encryptBuffer=new char[64];
-		int encryptedkeyLength=RSA_public_encrypt(256, clearValue,
+
+		char *encryptBuffer=new char[256];
+		int encryptedkeyLength=RSA_public_encrypt(64, clearValue,
 		                       (unsigned char *)encryptBuffer, portfolio->publicKey, RSA_PKCS1_PADDING);
 		encryptedValue=(uint8_t*)encryptBuffer;
 	}
@@ -172,6 +187,38 @@ uint8_t *Key::getClearValue(){
 	}
 	return clearValue;
 }
+
+void Key::computeClearValue(){
+		if (encryptedValue==NULL || portfolio->privateKey ==NULL)
+					throw new runtime_error("Cannot compute the clear value: unknow encrypted value or user's public key not assigned");
+		char *decryptBuffer = new char[64];
+		int decryptedKeyLength= RSA_private_decrypt(256, encryptedValue,
+								 (unsigned char*)decryptBuffer,portfolio->privateKey , RSA_PKCS1_PADDING);
+		clearValue=(uint8_t*)decryptBuffer;
+}
+
+
+
+
+void Key::dumpClearValue(){
+	uint8_t* v=getClearValue();
+	for (int i=0;i<64;i++){
+		cout << (int)v[i] << " ";
+	}
+	cout << endl;
+}
+
+
+void Key::dumpEncryptedValue(){
+	uint8_t* v=getEncryptedValue();
+	for (int i=0;i<64;i++){
+		cout << (int)v[i] << " ";
+	}
+	cout << endl;
+}
+
+
+
 
 
 } /* namespace std */

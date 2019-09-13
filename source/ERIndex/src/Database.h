@@ -47,7 +47,9 @@ private:
 	void savePortfolio(Portfolio *portfolio);
 	inline bool fileExists (const string& filePath,uint8_t **buffer,bool load);
 	void saveCorrespondenceArrayToDisk(string fileName,int *a,int n);
+	void loadCorrespondenceArrayFromDisk(string fileName,int *a,int n);
 	void buildSuffixArrayCorrespondenceFiles(int n,string reverseSaFileName,string saFileName,string r2fFileName,string f2rFileName);
+	void buildSuffixArrayCorrespondenceFiles(int n,int *saSuffixes,int *reverse_saSuffixes,string r2fFileName,string f2rFileName);
 
 	string rootDirectory;
 	Catalog* catalog;

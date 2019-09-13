@@ -468,7 +468,7 @@ void LZIndex::openForwardSuffixArray(){
 	ilog2n_reference=int_log2(n);
 	forwardSA = new sdsl::int_vector<>(n,0,ilog2n_reference);
 	load_from_file(*forwardSA,forwardSuffixArrayFileName);
-	//forwardSAFile = fopen(forwardSuffixArrayFileName.c_str(), "a+b");
+	//FILE *forwardSAFile = fopen(forwardSuffixArrayFileName.c_str(), "a+b");
 	//for (int i=0;i<n;i++)
 	//	forwardSA[i]=get_suffix(forwardSAFile,ilog2n_reference,i);
 }
@@ -643,7 +643,7 @@ void LZIndex::save(string indexFileName){
 	os.close();
 }*/
 
-void LZIndex::save(string indexFileName){
+int LZIndex::save(string indexFileName){
 	userPortfolio=database.getPortfolio();
 	//Create a system key encryption context
 	EncryptionContext *systemEncryptionContext=new EncryptionContext(userPortfolio->getSystemKey()->getClearValue(),0);
@@ -730,15 +730,13 @@ void LZIndex::save(string indexFileName){
 	for (int i=0;i<header.numberOfIndividuals;i++)
 		bitWriter.writeInt(header.factorizationStartOffsets[i]);
 
-	cout << "Index size: "<< indexSize << " bits (" <<  ceil((double)indexSize/8)  << " bytes)" << endl;
-	//cout << "Compression ratio: "<< ceil((double)indexSize/8)/textLength << endl;
-
 	bitWriter.flush();
 	bitWriter.close();
 
 	delete systemEncryptionContext;
 	delete suspendedInfosEncryptionContext;
 
+	return indexSize;
 }
 
 void LZIndex::dumpIndex(string dumpFileName){
@@ -865,7 +863,9 @@ void LZIndex::closeReverseReferenceIndex(){
 
 
 
-void LZIndex::buildIndexFromMultiFASTA(int numberOfIndividuals,Individual **individuals,seqan::StringSet<seqan::IupacString> *seqs){
+void LZIndex::buildIndexFromMultiFASTA(int numberOfIndividuals,
+		      Individual **individuals,
+			  seqan::StringSet<seqan::IupacString> *seqs){
 	this->numberOfIndividuals=numberOfIndividuals;
 	this->individuals=individuals;
 	this->fastaFileNames=fastaFileNames;
@@ -873,7 +873,7 @@ void LZIndex::buildIndexFromMultiFASTA(int numberOfIndividuals,Individual **indi
 	nextToFactorize=0;
 
 	int nt = std::thread::hardware_concurrency();
-	//int nt=1;
+	//nt=1;
 
 	cout << "Number of threads: " << nt << endl;
 	std::vector<std::thread*> threads;

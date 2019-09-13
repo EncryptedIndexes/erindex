@@ -234,7 +234,6 @@ void testLocate(string xmlFilePath){
 		if (testGroup.loadIndexInMemory){
 			cout << "Loading index in memory" << endl;
 			index->loadAllInMemory();
-
 		}
 		endTime=std::chrono::system_clock::now();
 		double openingTime=std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
@@ -1381,8 +1380,15 @@ int main(int argc, char* argv[]) {
 		string databaseRoot=argv[2];
 		int id=stoi(argv[3]);
 		string refSeqPath=argv[4];
+
+
+		std::chrono::time_point<std::chrono::system_clock> startTime,endTime;
+		startTime=std::chrono::system_clock::now();
 		Database database(databaseRoot);
 		database.addReferenceSequence(id, refSeqPath);
+		endTime=std::chrono::system_clock::now();
+		double openingTime=std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+		cout << "Elapsed: " << openingTime/1000 << "s" << endl;
 
 	} else if (command=="addind"){ //add an individual
 		if (argc < 4){
@@ -1429,7 +1435,7 @@ int main(int argc, char* argv[]) {
 		} else
 			database.addUser(username,NULL,NULL,NULL);
 	}
-	else if (command=="build"){
+	else if (command=="buildindex"){
 		if (argc < 6){
 			cout << "The following parameters are needed for the build command:" << endl;
 			cout << "1) database root directory" << endl;

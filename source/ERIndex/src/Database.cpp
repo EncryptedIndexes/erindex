@@ -19,11 +19,14 @@
 #include <seqan/sequence.h>
 #include <seqan/seq_io.h>
 #include <seqan/modifier.h>
+
 #include "LZIndex.h"
+#include <sdsl/int_vector.hpp>
+
 
 extern "C" {
 	int createFMIndex(char *infile_name, char *outfile_name,int bs_lev1, int bs_lev2, float mc_freq,
-			int save_sa_to_disk);
+			bwi_input *bwi,int save_sa_to_disk);
 }
 
 namespace std {
@@ -173,26 +176,42 @@ void Database::buildIndexFromMultiFASTA(string indexFileName, string multiFastaF
 	if (!boost::filesystem::is_regular_file(multiFastaFilePath))
 			throw new runtime_error("The given reference sequence file is not valid or not accessible!");
 
+		cout << "Reading sequences from the given multiFASTA file...";
 		seqan::SeqFileIn seqFileIn(multiFastaFilePath.c_str());
 		seqan::StringSet<seqan::CharString> codes;
 		seqan::StringSet<seqan::IupacString> seqs;
 		seqan::readRecords(codes, seqs, seqFileIn);
 
 		int numSeqs=length(seqs);
-
+		int totalLength=0;
 		if (numSeqs >0){
 			LZIndex index(*this,referenceId,blockSize);
-			Individual **individs=new Individual*[catalog->individuals.size()];
+			Individual **individs=new Individual*[numSeqs];
 
 			int i=0;
 			for (i=0;i<numSeqs;i++){
-				string sequenceCode(seqan::toCString(codes[0]));
+				string sequenceCode(seqan::toCString(codes[i]));
+				totalLength+=length(seqs[i]);
 				//if the individual does not exist in the database catalog, adds it
 				Individual *individ=catalog->getIndividual(sequenceCode);
 				if (individ==NULL)
 					individ=addIndividual(sequenceCode,NULL);
 				individs[i]=individ;
 			}
+
+			cout << "Building the index in memory..." <<endl;
+			index.buildIndexFromMultiFASTA(numSeqs, individs, &seqs);
+			cout << "Saving the index to disk..." <<endl;
+			cout << "Collection size: "<< to_string(totalLength) << "bytes" << endl;
+			int indexSize=index.save(rootDirectory + "/indexes/"+ indexFileName);
+			cout << "Index size: "<< indexSize << " bits (" <<  ceil((double)indexSize/8)  << " bytes)" << endl;
+			//cout << "Compression ratio: "<< ceil((double)indexSize/8)/textLength << endl;
+			double cr=((double)ceil((double)indexSize/8)/(double)totalLength);
+			cout << "Compession ratio: " << cr << endl;
+			index.close();
+
+
+
 		} else
 			throw new runtime_error("The given MultiFASTA file is empty!");
 }
@@ -228,7 +247,6 @@ bool Database::verifyIndexFromMultiFASTA(string indexFileName,string multiFastaF
 	bool ok=true;
 	vector<int64_t> ids=index->getIndividualIds();
 	for (unsigned int i=0;i<ids.size();i++){
-
 		string s=index->getSequence(ids[i]);
 		Individual *individual=catalog->individuals[ids[i]];
 		cout << "Verifying the individual " << i << "(" << individual->code << ")" << endl;
@@ -237,20 +255,23 @@ bool Database::verifyIndexFromMultiFASTA(string indexFileName,string multiFastaF
 		seqan::IupacString t=seqs[i];
 		int tsize=length(t);
 
-		if (ssize!=tsize){
-			ok=false;
-			int minSize;
-			if (ssize<tsize)
-				minSize=ssize;
-			else
-				minSize=tsize;
-			for (int i=0;i<minSize;i++){
-				if (s[i]!=t[i]){
-					cout << "ERROR at " << i << endl;
-					break;
-				}
+
+		//if (ssize!=tsize){
+		ok=true;
+		int minSize;
+		if (ssize<tsize)
+			minSize=ssize;
+		else
+			minSize=tsize;
+		for (int i=0;i<minSize;i++){
+			if (s[i]!=t[i]){
+				cout << s[i] << "!=" << t[i] << endl;
+				cout << "ERROR at " << i << endl;
+				ok=false;
+				break;
 			}
 		}
+		//}
 	}
 	return ok;
 
@@ -414,13 +435,22 @@ void Database::saveCorrespondenceArrayToDisk(string fileName,int *a,int n){
 	FileBitWriter bw(fileName);
 	bw.open();
 	int psize = int_log2(n);
-	for(int i=0;i<n;i++)
+	for(int i=0;i<n;i++){
 	    bw.write(psize,a[i]);
+	    //cout  << i << " -> " << a[i] << endl;
+	}
 	bw.flush();
 	bw.close();
 }
 
-
+void Database::loadCorrespondenceArrayFromDisk(string fileName,int *a,int n){
+	FileBitReader br(fileName);
+	br.open();
+	int psize = int_log2(n);
+	for(int i=0;i<n;i++)
+		a[i]=br.read(psize);
+	br.close();
+}
 
 
 
@@ -453,6 +483,55 @@ __inline__ int get_suffix(FILE *Safile, int n,int i)
 }
 
 
+void Database::buildSuffixArrayCorrespondenceFiles(int n,int *saSuffixes,int *reverse_saSuffixes,string r2fFileName,string f2rFileName){
+
+	int *saSuffixesPerPosition=new int[n];
+	for (int i=0;i<n;i++){
+			saSuffixesPerPosition[i]=-1;
+	}
+
+	int s;
+	for (int i=0;i<n;i++){
+		s=saSuffixes[i];
+		saSuffixesPerPosition[s]=i;
+	}
+
+
+	//Calcolo i due vettori r2f ed f2r, che consentono rispettivamente di passare da un suffisso dellla stringa reverse al corrispondente della straight e viceversa
+	int *r2f=new int[n];
+	int *f2r=new int[n];
+	int revSa_di_i;
+	int j;
+	cout << "Computing R2F and F2R" << endl;
+	for (int i=0;i<n;i++){
+		if (i%10000000==0)
+			cout << "Computing the "<< (i+1) << "-th R2F and F2R element"<< endl;
+		revSa_di_i=reverse_saSuffixes[i];
+		if (saSuffixesPerPosition[n-revSa_di_i-1]==-1){
+			cout << "NNCUC" << endl;
+			exit(1);
+		}
+		j=saSuffixesPerPosition[n-revSa_di_i-1]; //suffix related to the same text position
+		r2f[i]=j;
+		f2r[j]=i;
+	}
+
+
+	//Salvo i due array su disco
+	saveCorrespondenceArrayToDisk(r2fFileName,r2f,n);
+	saveCorrespondenceArrayToDisk(f2rFileName,f2r,n);
+
+	free(r2f);
+	free(f2r);
+}
+
+
+
+
+
+
+
+
 void Database::buildSuffixArrayCorrespondenceFiles(int n,string reverseSaFileName,string saFileName,string r2fFileName,string f2rFileName){
 
 	FILE *revSaFile = fopen(reverseSaFileName.c_str(), "a+b");
@@ -462,6 +541,8 @@ void Database::buildSuffixArrayCorrespondenceFiles(int n,string reverseSaFileNam
 	//fill_n(saSuffixes,n,-1);
 	for (int i=0;i<n;i++)
 		saSuffixes[i]=-1;
+
+
 
 	cout << "Reading suffix array from disk" << endl;
 	cout << "It may take a few minutes" << endl;
@@ -518,6 +599,7 @@ ReferenceSequence *Database::addReferenceSequence(int id,string referenceSequenc
 	if (!boost::filesystem::is_regular_file(referenceSequenceFastaFilePath))
 		throw new runtime_error("The given reference sequence file is not valid or not accessible!");
 
+	cout << "Reading the reference sequence from FASTA file... "<< endl;
 	seqan::SeqFileIn seqFileIn(referenceSequenceFastaFilePath.c_str());
 	seqan::StringSet<seqan::CharString> ids;
 	seqan::StringSet<seqan::IupacString> seqs;
@@ -534,7 +616,6 @@ ReferenceSequence *Database::addReferenceSequence(int id,string referenceSequenc
 		string fileName=p.stem().string();
 		string indexFilePath=this->rootDirectory + "/references/" + fileName + ".bwi";
 
-
 		//Creates the FM-index and the suffix array of the sequence and saves them to disk
 		//Creates a temporary file containing only the reference sequence characters
 		string sequenceDescription(seqan::toCString(ids[0]));
@@ -547,44 +628,94 @@ ReferenceSequence *Database::addReferenceSequence(int id,string referenceSequenc
 		temporaryFileStream.flush();
 		temporaryFileStream.close();
 
-
-
 		string temporaryFileName=tfn;
+		cout << "Creating the FM-index of the forward sequence... " << endl;
+		bwi_input *bwi = new bwi_input();
 		createFMIndex(Utils::toCString(temporaryFileName), Utils::toCString(indexFilePath),
-				8192, 1024, 0.02,1);
+				8192, 1024, 0.02, bwi,  1);
 
-		//Creates the FM-index and the suffix array of the sequence reverse complement and saves them to disk
+		cout << "Writing forward suffix array to disk... ";
+		n=bwi->text_size;
+		int ilog2n_reference=int_log2(n);
+		sdsl::int_vector<> *forwardSA = new sdsl::int_vector<>(n,0,ilog2n_reference);
+		for (int i=0;i<n;i++){
+			(*forwardSA)[i]=bwi->sa[i];
+			//cout << "sa[" << i << "]=" << bwi->sa[i] << endl;
+		}
 
+		string forwardSuffixArrayFilePath=this->rootDirectory + "/references/" + fileName + ".sa";
+		store_to_file(*forwardSA,forwardSuffixArrayFilePath);
+
+		//Creates the FM-index and the suffix array of the reversed sequence and saves them to disk
 		tfn=std::tmpnam(nullptr);
 		std::ofstream temporaryFileStream2(tfn);
 		seqan::IupacString revSeq=seqs[0];
-		reverseComplement(revSeq);
+		//reverseComplement(revSeq);
+		reverse(revSeq);
 		temporaryFileStream2 << revSeq;
 		temporaryFileStream2.flush();
 		temporaryFileStream2.close();
 
 		string revIndexFilePath=this->rootDirectory + "/references/" + fileName + "_rev.bwi";
 		temporaryFileName=tfn;
+		cout << "Creating the FM-index of the reversed sequence... "  << endl;
+		bwi_input *bwi_rev = new bwi_input();
 		createFMIndex(Utils::toCString(temporaryFileName), Utils::toCString(revIndexFilePath),
-						8192, 1024, 0.02,1);
+						8192, 1024, 0.02,bwi_rev,1);
 
+
+		sdsl::int_vector<> *reverseSA = new sdsl::int_vector<>(n,0,ilog2n_reference);
+		for (int i=0;i<n;i++){
+			(*reverseSA)[i]=bwi_rev->sa[i];
+			//cout << "rev_sa[" << i << "]=" << bwi_rev->sa[i] << endl;
+		}
+
+		/*
+		string reverseSuffixArrayFilePath=this->rootDirectory + "/references/" + fileName + "_rev.sa";
+		store_to_file(*reverseSA,reverseSuffixArrayFilePath);
+		*/
+
+		cout << "Creating R2F and F2R mapping files..." << endl;
 		//builds the R2F and F2R suffix array correspondence files
-		string revSaFileName=this->rootDirectory + "/references/" + fileName + "_rev.sa";
-		string saFileName=this->rootDirectory + "/references/" + fileName + ".sa";
+		//string revSaFileName=this->rootDirectory + "/references/" + fileName + "_rev.sa";
+		//string saFileName=this->rootDirectory + "/references/" + fileName + ".sa";
 		string r2fFileName=this->rootDirectory + "/references/" + fileName + ".r2f";
 		string f2rFileName=this->rootDirectory + "/references/" + fileName + ".f2r";
-		buildSuffixArrayCorrespondenceFiles(n, revSaFileName, saFileName, r2fFileName, f2rFileName);
+		buildSuffixArrayCorrespondenceFiles(n, bwi->sa,bwi_rev->sa, r2fFileName, f2rFileName);
+		//buildSuffixArrayCorrespondenceFiles(n, revSaFileName, saFileName, r2fFileName, f2rFileName);
+
+        /*
+		int *nuovo=new int[n];
+		int *vecchio = new int[n];
+		loadCorrespondenceArrayFromDisk(this->rootDirectory + "/references/" + fileName + ".r2f", nuovo, n);
+
+		string path="/home/fernando/camilla/egcdb/references/" + fileName + ".r2f";
+		loadCorrespondenceArrayFromDisk(path, vecchio, n);
+		for (int i=0;i<n;i++){
+			if (vecchio[i]!=nuovo[i]){
+				cout << i << " " << vecchio[i] << " " << nuovo[i] <<endl;
+			}
+		}
+		*/
+		delete bwi;
+		delete bwi_rev;
 
 		//deletes from disk the reverse suffix array file
-		boost::filesystem::remove(revSaFileName);
+		//boost::filesystem::remove(revSaFileName);
 
+
+
+
+
+
+		cout << "Adding the reference sequence to the catalog... ";
 		//adds the reference sequence to the catalog
 		ReferenceSequence *ref=new ReferenceSequence();
 		ref->id=id;
 		ref->forwardIndexFileName=indexFilePath;
 		ref->reverseIndexFileName=revIndexFilePath;
 		ref->correspondenceFilesName=this->rootDirectory + "/references/" + fileName;
-		ref->forwardSuffixArrayFileName=saFileName;
+		ref->forwardSuffixArrayFileName=forwardSuffixArrayFilePath;
 		catalog->addReferenceSequence(ref);
 		catalog->save();
 
@@ -640,9 +771,17 @@ Individual *Database::addIndividual(string &code, string *individualKeyFilePath)
 	std::ifstream ifile;
     ifile.open (*ifp);
     uint8_t *clearValue=new uint8_t[64];
-	ifile >> clearValue;
+    ifile.read((char*)clearValue, 64);
+	//ifile >> clearValue;
 	ifile.close();
 	portfolio->addIndividualKey(ind, clearValue);
+
+	//loads, if not yet loaded, the user's public key from the security sub-directory
+	//because saving an individual key into the user's portfolio requires encoding it with the user's public key
+	if (portfolio->publicKey == NULL){
+		string dbPublicKeyFilePath=rootDirectory+"/security/user_"+ boost::lexical_cast<std::string>(portfolio->userId)+ ".pub";
+		portfolio->loadPublicKey(dbPublicKeyFilePath);
+	}
 	portfolio->saveIndividualKey(rootDirectory + "/security",newId);
 
 	//adds the individual to the catalog
@@ -650,7 +789,7 @@ Individual *Database::addIndividual(string &code, string *individualKeyFilePath)
 	catalog->save();
 
 	//TODO: remove the clear text individual key (I don't remove it at the moment for testing purposes)
-
+	return ind;
 }
 
 
@@ -659,6 +798,7 @@ Individual *Database::addIndividual(string &code, string *individualKeyFilePath)
 
 
 User *Database::addUser(string username,int *userId,string *privateKeyFilePath,string *publicKeyFilePath){
+
 	User *u=new User();
 	u->username=username;
 	//if the parameter userid was given, check if it exists in the database
@@ -693,19 +833,50 @@ User *Database::addUser(string username,int *userId,string *privateKeyFilePath,s
 	}
 
 
+
+	//initializes the user's portfolio, storing in it the system key
+	Portfolio *portfolio=new Portfolio(u->id);
+
+	RSA *publicKey = NULL;
+	FILE *publicKeyFile = fopen(dbPublicKeyFilePath.c_str(),"rb");
+	if (PEM_read_RSAPublicKey(publicKeyFile, &publicKey, NULL, NULL) != NULL)
+			portfolio->setPublicKey(publicKey);
+	else{
+			fclose(publicKeyFile);
+			throw;
+	}
+	portfolio->setPublicKey(publicKey);
+
+
+	RSA *privateKey = NULL;
+	FILE *privateKeyFile = fopen(dbPrivateKeyFilePath.c_str(),"rb");
+	if (PEM_read_RSAPrivateKey(privateKeyFile, &privateKey, NULL, NULL) != NULL)
+			portfolio->setPrivateKey(privateKey);
+	else{
+			fclose(privateKeyFile);
+			throw;
+	}
+	portfolio->setPublicKey(publicKey);
+
+
+
 	//reads the clear value of the system key from the corresponding file and adds it to the user's portfolio
 	std::ifstream ifile;
 	ifile.open (rootDirectory+"/security/system.key");
 	uint8_t *clearValue=new uint8_t[64];
-	ifile >> clearValue;
+	ifile.read((char*)clearValue, 64);
+	//ifile >> clearValue;
 	ifile.close();
 
 
-	//initializes the user's portfolio, storing in it the system key
-	Portfolio *portfolio=new Portfolio(u->id);
+
 	portfolio->addSystemKey(clearValue);
+	//Key *sk=portfolio->getSystemKey();
+	//sk->dumpClearValue();
+	//sk->dumpEncryptedValue();
+	//sk->computeClearValue();
+	//sk->dumpClearValue();
 	portfolio->saveSystemKey(rootDirectory + "/security");
-	savePortfolio(portfolio);
 
 	//TODO:encrypts the value ERINDEX_LOGIN_VALUE with the user's public key
 	//and stores it into the loginValue field

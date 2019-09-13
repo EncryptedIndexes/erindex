@@ -215,7 +215,7 @@ public:
 	LZIndex(Database &database,int referenceIdentifier,int blockSize);
 	virtual ~LZIndex();
 	void open(string indexFileName);
-	void save(string indexFileName);
+	int save(string indexFileName);  //returns the index size
 	void dumpIndex(string dumpFileName);
 	void close();
 
