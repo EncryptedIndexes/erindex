@@ -153,12 +153,12 @@ void Utils::generateSalsa20KeyFile(string &keyFilePath) {
 		for (uint32_t i=0;i<64;i++)
 			key[i]=distribution(generator);
 
-
+		/*
 		for (int i=0;i<64;i++){
 				cout << (int)key[i] << " ";
 		}
 		cout << endl;
-
+		*/
 
 
 		ofstream keyFile(keyFilePath, ios::out | ios::binary);
